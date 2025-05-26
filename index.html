@@ -12,74 +12,97 @@
             <h1>Ethereum Validator Duties Tracker</h1>
             <p class="subtitle">Track upcoming duties for your validators</p>
         </header>
+        
+        <nav class="main-nav">
+            <button class="nav-btn active" data-page="duties">My Duties</button>
+            <button class="nav-btn" data-page="network">Network Overview</button>
+            <button class="nav-btn" data-page="settings">Settings</button>
+        </nav>
 
-        <section class="beacon-config">
-            <h2>Beacon Node Configuration</h2>
-            <div class="config-form">
-                <div class="form-group">
-                    <label for="beaconUrl">Beacon Node URL:</label>
-                    <input type="text" id="beaconUrl" placeholder="http://localhost:5052" value="http://localhost:5052">
-                </div>
-                <div class="form-group">
-                    <label for="publicBeaconSelect">Or select a public beacon node:</label>
-                    <select id="publicBeaconSelect">
-                        <option value="">-- Select Public Node --</option>
-                    </select>
-                    <small>Note: Public nodes may have rate limits</small>
-                </div>
-            </div>
-        </section>
-
-        <section class="validators-section">
-            <h2>Add Validators</h2>
-            <div class="add-validator-form">
-                <div class="form-group">
-                    <label for="validatorInput">Validator Public Key or Index:</label>
-                    <input type="text" id="validatorInput" placeholder="0x... or validator index">
-                    <button id="addValidatorBtn" class="btn-primary">Add Validator</button>
-                </div>
-                <small>Tip: Use validator indices for better performance with many validators</small>
-            </div>
-
-            <div class="validators-list">
-                <h3>Tracked Validators</h3>
-                <ul id="validatorsList"></ul>
-            </div>
-        </section>
-
-        <section class="duties-section">
-            <h2>Upcoming Duties</h2>
-            <div id="epochInfo" style="text-align: center; color: var(--text-secondary); margin-bottom: 20px;"></div>
-            <div class="controls">
-                <button id="fetchDutiesBtn" class="btn-primary">Fetch Duties</button>
-                <button id="clearCacheBtn" class="btn-secondary">Clear Cache</button>
-                <div class="auto-refresh">
-                    <label>
-                        <input type="checkbox" id="autoRefresh">
-                        Auto-refresh every 30 seconds
-                    </label>
-                </div>
-            </div>
-
-            <div class="duties-display">
-                <div id="loadingIndicator" class="loading hidden">Loading duties...</div>
-                <div id="errorMessage" class="error-message hidden"></div>
-                
-                <div class="duties-tabs">
-                    <button class="tab-btn active" data-tab="proposer">Proposer Duties</button>
-                    <button class="tab-btn" data-tab="attester">Attester Duties</button>
-                    <button class="tab-btn" data-tab="sync">Sync Committee</button>
+        <!-- My Duties Page -->
+        <div id="dutiesPage" class="page active">
+            <section class="validators-section">
+                <h2>Add Validators</h2>
+                <div class="add-validator-form">
+                    <div class="form-group">
+                        <label for="validatorInput">Validator Public Key or Index:</label>
+                        <input type="text" id="validatorInput" placeholder="0x... or validator index">
+                        <button id="addValidatorBtn" class="btn-primary">Add Validator</button>
+                    </div>
+                    <small>Tip: Use validator indices for better performance with many validators</small>
                 </div>
 
-                <div class="duties-content">
-                    <div id="proposerDuties" class="duty-panel active"></div>
-                    <div id="attesterDuties" class="duty-panel"></div>
-                    <div id="syncDuties" class="duty-panel"></div>
+                <div class="validators-list">
+                    <h3>Tracked Validators</h3>
+                    <ul id="validatorsList"></ul>
                 </div>
-            </div>
-        </section>
+            </section>
 
-        <section class="notifications-section">
+            <section class="duties-section">
+                <h2>Upcoming Duties</h2>
+                <div id="epochInfo" style="text-align: center; color: var(--text-secondary); margin-bottom: 20px;"></div>
+                <div class="controls">
+                    <button id="fetchDutiesBtn" class="btn-primary">Fetch Duties</button>
+                    <button id="clearCacheBtn" class="btn-secondary">Clear Cache</button>
+                    <div class="auto-refresh">
+                        <label>
+                            <input type="checkbox" id="autoRefresh">
+                            Auto-refresh every 30 seconds
+                        </label>
+                    </div>
+                </div>
+
+                <div class="duties-display">
+                    <div id="loadingIndicator" class="loading hidden">Loading duties...</div>
+                    <div id="errorMessage" class="error-message hidden"></div>
+                    
+                    <div class="duties-tabs">
+                        <button class="tab-btn active" data-tab="proposer">Proposer Duties</button>
+                        <button class="tab-btn" data-tab="attester">Attester Duties</button>
+                        <button class="tab-btn" data-tab="sync">Sync Committee</button>
+                    </div>
+
+                    <div class="duties-content">
+                        <div id="proposerDuties" class="duty-panel active"></div>
+                        <div id="attesterDuties" class="duty-panel"></div>
+                        <div id="syncDuties" class="duty-panel"></div>
+                    </div>
+                </div>
+            </section>
+        </div>
+
+        <!-- Network Overview Page -->
+        <div id="networkPage" class="page">
+            <section class="network-section">
+                <h2>Network Overview</h2>
+                <div class="controls">
+                    <button id="fetchNetworkBtn" class="btn-primary">Refresh Network Data</button>
+                </div>
+                <div id="networkLoadingIndicator" class="loading hidden">Loading network data...</div>
+                <div id="networkContent"></div>
+            </section>
+        </div>
+
+        <!-- Settings Page -->
+        <div id="settingsPage" class="page">
+            <section class="beacon-config">
+                <h2>Beacon Node Configuration</h2>
+                <div class="config-form">
+                    <div class="form-group">
+                        <label for="beaconUrl">Beacon Node URL:</label>
+                        <input type="text" id="beaconUrl" placeholder="http://localhost:5052">
+                    </div>
+                    <div class="form-group">
+                        <label for="publicBeaconSelect">Or select a public beacon node:</label>
+                        <select id="publicBeaconSelect">
+                            <option value="">-- Select Public Node --</option>
+                        </select>
+                        <small>Note: Public nodes may have rate limits</small>
+                    </div>
+                </div>
+            </section>
+
+            <section class="notifications-section">
             <h2>Notifications</h2>
             <div class="notification-options">
                 <div class="notification-type">
@@ -132,6 +155,7 @@
                 </div>
             </div>
         </section>
+        </div>
 
         <footer>
             <p>Data cached in session storage | Inspired by <a href="https://github.com/TobiWo/eth-duties" target="_blank">eth-duties</a></p>

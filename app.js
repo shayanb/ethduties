@@ -1,6 +1,7 @@
 class ValidatorDutiesTracker {
     constructor() {
-        this.beaconUrl = 'http://localhost:5052';
+        // Load beacon URL from storage or use default
+        this.beaconUrl = sessionStorage.getItem('beaconUrl') || 'http://localhost:5052';
         this.serverUrl = 'http://localhost:3000';
         this.publicBeaconUrls = [
             { name: 'PublicNode', url: 'https://ethereum-beacon-api.publicnode.com' },
@@ -16,6 +17,11 @@ class ValidatorDutiesTracker {
             proposer: [],
             attester: [],
             sync: []
+        };
+        this.networkOverview = {
+            allProposers: [],
+            currentSyncCommittee: [],
+            nextSyncCommittee: []
         };
         this.pushSubscription = null;
         this.notifiedDuties = new Set();
@@ -36,6 +42,11 @@ class ValidatorDutiesTracker {
     }
 
     initializeEventListeners() {
+        // Navigation
+        document.querySelectorAll('.nav-btn').forEach(btn => {
+            btn.addEventListener('click', (e) => this.switchPage(e.target.dataset.page));
+        });
+        
         document.getElementById('addValidatorBtn').addEventListener('click', () => this.addValidator());
         document.getElementById('validatorInput').addEventListener('keypress', (e) => {
             if (e.key === 'Enter') {
@@ -46,8 +57,19 @@ class ValidatorDutiesTracker {
         
         document.getElementById('fetchDutiesBtn').addEventListener('click', () => this.fetchAllDuties());
         document.getElementById('clearCacheBtn').addEventListener('click', () => this.clearCache());
+        document.getElementById('fetchNetworkBtn').addEventListener('click', () => this.fetchNetworkOverviewOnly());
         
-        document.getElementById('autoRefresh').addEventListener('change', (e) => {
+        // Load and set auto-refresh setting
+        const autoRefreshEnabled = sessionStorage.getItem('autoRefresh') === 'true';
+        const autoRefreshCheckbox = document.getElementById('autoRefresh');
+        autoRefreshCheckbox.checked = autoRefreshEnabled;
+        
+        if (autoRefreshEnabled) {
+            this.startAutoRefresh();
+        }
+        
+        autoRefreshCheckbox.addEventListener('change', (e) => {
+            sessionStorage.setItem('autoRefresh', e.target.checked);
             if (e.target.checked) {
                 this.startAutoRefresh();
             } else {
@@ -64,16 +86,34 @@ class ValidatorDutiesTracker {
             publicSelect.appendChild(option);
         });
         
+        // Set initial beacon URL in input
+        const beaconUrlInput = document.getElementById('beaconUrl');
+        beaconUrlInput.value = this.beaconUrl;
+        
+        // Check if current URL matches a public beacon
+        const matchingBeacon = this.publicBeaconUrls.find(b => b.url === this.beaconUrl);
+        if (matchingBeacon) {
+            publicSelect.value = matchingBeacon.url;
+        }
+        
         publicSelect.addEventListener('change', (e) => {
-            const beaconUrlInput = document.getElementById('beaconUrl');
             if (e.target.value) {
                 this.beaconUrl = e.target.value;
                 beaconUrlInput.value = this.beaconUrl;
+                sessionStorage.setItem('beaconUrl', this.beaconUrl);
+                this.showSuccess('Beacon node URL updated');
             }
         });
         
-        document.getElementById('beaconUrl').addEventListener('change', (e) => {
+        beaconUrlInput.addEventListener('change', (e) => {
             this.beaconUrl = e.target.value;
+            sessionStorage.setItem('beaconUrl', this.beaconUrl);
+            
+            // Update dropdown if it matches a public beacon
+            const matchingBeacon = this.publicBeaconUrls.find(b => b.url === this.beaconUrl);
+            publicSelect.value = matchingBeacon ? matchingBeacon.url : '';
+            
+            this.showSuccess('Beacon node URL updated');
         });
         
         document.querySelectorAll('.tab-btn').forEach(btn => {
@@ -83,6 +123,9 @@ class ValidatorDutiesTracker {
         document.getElementById('enableBrowserNotifications').addEventListener('click', () => this.enableBrowserNotifications());
         document.getElementById('enableTelegramNotifications').addEventListener('click', () => this.enableTelegramNotifications());
         document.getElementById('updateTelegramSubscription').addEventListener('click', () => this.updateTelegramSubscription());
+        
+        // Load and apply notification settings
+        this.loadNotificationSettings();
     }
 
     async initializeNotifications() {
@@ -523,6 +566,9 @@ class ValidatorDutiesTracker {
             this.cacheDuties();
             this.displayDuties();
             
+            // Fetch network overview in background
+            this.fetchNetworkOverview(currentEpoch).catch(console.error);
+            
             // Show success message
             this.showSuccess(`Successfully fetched duties for ${this.validators.length} validator(s)`);
             
@@ -652,6 +698,59 @@ class ValidatorDutiesTracker {
         this.displayProposerDuties();
         this.displayAttesterDuties();
         this.displaySyncCommitteeDuties();
+    }
+    
+    async fetchNetworkOverviewOnly() {
+        const loadingEl = document.getElementById('networkLoadingIndicator');
+        loadingEl.classList.remove('hidden');
+        
+        try {
+            const currentSlot = await this.getCurrentSlot();
+            const currentEpoch = Math.floor(currentSlot / 32);
+            await this.fetchNetworkOverview(currentEpoch);
+        } catch (error) {
+            console.error('Error fetching network overview:', error);
+            document.getElementById('networkContent').innerHTML = `
+                <div class="error-message">Failed to load network data: ${error.message}</div>
+            `;
+        } finally {
+            loadingEl.classList.add('hidden');
+        }
+    }
+    
+    async fetchNetworkOverview(currentEpoch) {
+        try {
+            // Fetch all proposer duties for current epoch
+            const allProposersResponse = await fetch(`${this.serverUrl}/api/beacon/eth/v1/validator/duties/proposer/${currentEpoch}`, {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ beaconUrl: this.beaconUrl })
+            });
+            
+            if (allProposersResponse.ok) {
+                const data = await allProposersResponse.json();
+                this.networkOverview.allProposers = data.data || [];
+            }
+            
+            // Fetch sync committee
+            const syncResponse = await fetch(`${this.serverUrl}/api/beacon/eth/v1/beacon/states/head/sync_committees`, {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ beaconUrl: this.beaconUrl })
+            });
+            
+            if (syncResponse.ok) {
+                const data = await syncResponse.json();
+                if (data.data) {
+                    this.networkOverview.currentSyncCommittee = data.data.validators || [];
+                    this.networkOverview.nextSyncCommittee = data.data.next_validators || [];
+                }
+            }
+            
+            this.displayNetworkOverview();
+        } catch (error) {
+            console.error('Error fetching network overview:', error);
+        }
     }
 
     displayProposerDuties() {
@@ -822,6 +921,139 @@ class ValidatorDutiesTracker {
         
         panel.innerHTML = html;
     }
+    
+    displayNetworkOverview() {
+        const panel = document.getElementById('networkContent');
+        if (!panel) return;
+        
+        const currentSlot = this.getCurrentSlotSync();
+        const currentEpoch = Math.floor(currentSlot / 32);
+        
+        // Sort upcoming proposers by slot
+        const upcomingProposers = this.networkOverview.allProposers
+            .filter(duty => duty.slot >= currentSlot)
+            .sort((a, b) => a.slot - b.slot)
+            .slice(0, 64); // Show next 2 epochs
+        
+        // Count sync committee members
+        const syncCommitteeSize = this.networkOverview.currentSyncCommittee.length;
+        const nextSyncSize = this.networkOverview.nextSyncCommittee.length;
+        const syncPeriod = Math.floor(currentEpoch / 256);
+        const epochsInPeriod = currentEpoch % 256;
+        const epochsRemaining = 256 - epochsInPeriod;
+        
+        let html = `
+            <div class="network-overview">
+                <div class="overview-section">
+                    <h3>Upcoming Block Proposers</h3>
+                    <div class="epoch-info">
+                        Current Slot: ${currentSlot} | Current Epoch: ${currentEpoch}
+                    </div>
+                    <div class="proposers-grid">
+        `;
+        
+        if (upcomingProposers.length === 0) {
+            html += '<p style="text-align: center; color: var(--text-secondary);">No proposer data available</p>';
+        } else {
+            upcomingProposers.forEach(duty => {
+                const timeUntil = this.getTimeUntilSlot(duty.slot);
+                const blocksFromNow = duty.slot - currentSlot;
+                const isTracked = this.validators.includes(duty.pubkey) || 
+                                this.validators.includes(duty.validator_index?.toString());
+                const validator = isTracked ? this.getValidatorForDuty(duty) : null;
+                const color = validator ? this.getValidatorColor(validator) : '#94a3b8';
+                const label = duty.validator_index ? `#${duty.validator_index}` : this.truncateAddress(duty.pubkey);
+                
+                html += `
+                    <div class="proposer-card ${isTracked ? 'tracked' : ''}">
+                        <div class="proposer-header">
+                            <span class="proposer-slot">Slot ${duty.slot}</span>
+                            <span class="validator-badge" style="background-color: ${color}">${label}</span>
+                        </div>
+                        <div class="proposer-details">
+                            <div class="time-info">
+                                <span class="time-label">Time:</span>
+                                <span class="time-value">${this.formatTimeUntil(timeUntil)}</span>
+                            </div>
+                            <div class="blocks-info">
+                                <span class="blocks-label">Blocks:</span>
+                                <span class="blocks-value">+${blocksFromNow}</span>
+                            </div>
+                        </div>
+                    </div>
+                `;
+            });
+        }
+        
+        html += `
+                    </div>
+                </div>
+                
+                <div class="overview-section">
+                    <h3>Sync Committee Information</h3>
+                    <div class="sync-period-info">
+                        <p>Current Period: ${syncPeriod} | Epochs in Period: ${epochsInPeriod}/256 | Remaining: ${epochsRemaining} epochs</p>
+                    </div>
+                    <div class="sync-committee-info">
+                        <div class="sync-stat">
+                            <h4>Current Sync Committee</h4>
+                            <p class="sync-count">${syncCommitteeSize} validators</p>
+                            <p class="sync-detail">Period ${syncPeriod}</p>
+                            <p class="sync-detail">Epochs ${syncPeriod * 256} - ${(syncPeriod + 1) * 256 - 1}</p>
+                        </div>
+                        <div class="sync-stat">
+                            <h4>Next Sync Committee</h4>
+                            <p class="sync-count">${nextSyncSize} validators</p>
+                            <p class="sync-detail">Period ${syncPeriod + 1}</p>
+                            <p class="sync-detail">Starts in ${epochsRemaining} epochs</p>
+                        </div>
+                    </div>
+        `;
+        
+        // Show tracked validators in sync committee
+        const trackedInCurrent = this.networkOverview.currentSyncCommittee.filter(v => 
+            this.validators.includes(v) || this.validators.includes(v.toString())
+        );
+        const trackedInNext = this.networkOverview.nextSyncCommittee.filter(v => 
+            this.validators.includes(v) || this.validators.includes(v.toString())
+        );
+        
+        if (trackedInCurrent.length > 0 || trackedInNext.length > 0) {
+            html += `
+                <div class="tracked-sync-members">
+                    <h4>Your Validators in Sync Committee</h4>
+            `;
+            
+            if (trackedInCurrent.length > 0) {
+                html += '<div class="sync-validators">';
+                trackedInCurrent.forEach(v => {
+                    const color = this.getValidatorColor(v);
+                    const label = this.getValidatorLabel(v);
+                    html += `<span class="validator-badge" style="background-color: ${color}">${label}</span>`;
+                });
+                html += '</div>';
+            }
+            
+            if (trackedInNext.length > 0) {
+                html += '<div class="sync-validators" style="margin-top: 10px;"><strong>Next Period:</strong> ';
+                trackedInNext.forEach(v => {
+                    const color = this.getValidatorColor(v);
+                    const label = this.getValidatorLabel(v);
+                    html += `<span class="validator-badge" style="background-color: ${color}">${label}</span>`;
+                });
+                html += '</div>';
+            }
+            
+            html += '</div>';
+        }
+        
+        html += `
+                </div>
+            </div>
+        `;
+        
+        panel.innerHTML = html;
+    }
 
     getCurrentSlotSync() {
         const genesisTime = 1606824023;
@@ -880,6 +1112,50 @@ class ValidatorDutiesTracker {
         
         document.querySelectorAll('.duty-panel').forEach(panel => {
             panel.classList.toggle('active', panel.id === `${tab}Duties`);
+        });
+    }
+    
+    switchPage(page) {
+        // Update navigation
+        document.querySelectorAll('.nav-btn').forEach(btn => {
+            btn.classList.toggle('active', btn.dataset.page === page);
+        });
+        
+        // Update pages
+        document.querySelectorAll('.page').forEach(p => {
+            p.classList.toggle('active', p.id === `${page}Page`);
+        });
+        
+        // Load network data if switching to network page
+        if (page === 'network' && this.networkOverview.allProposers.length === 0) {
+            this.fetchNetworkOverviewOnly();
+        }
+    }
+    
+    loadNotificationSettings() {
+        // Load saved settings
+        const settings = {
+            notifyProposer: sessionStorage.getItem('notifyProposer') !== 'false',
+            notifyAttester: sessionStorage.getItem('notifyAttester') !== 'false',
+            notifySync: sessionStorage.getItem('notifySync') !== 'false',
+            notifyMinutes: sessionStorage.getItem('notifyMinutes') || '10'
+        };
+        
+        // Apply settings to UI
+        document.getElementById('notifyProposer').checked = settings.notifyProposer;
+        document.getElementById('notifyAttester').checked = settings.notifyAttester;
+        document.getElementById('notifySync').checked = settings.notifySync;
+        document.getElementById('notifyMinutes').value = settings.notifyMinutes;
+        
+        // Save settings on change
+        ['notifyProposer', 'notifyAttester', 'notifySync'].forEach(id => {
+            document.getElementById(id).addEventListener('change', (e) => {
+                sessionStorage.setItem(id, e.target.checked);
+            });
+        });
+        
+        document.getElementById('notifyMinutes').addEventListener('change', (e) => {
+            sessionStorage.setItem('notifyMinutes', e.target.value);
         });
     }
 

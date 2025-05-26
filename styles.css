@@ -32,11 +32,53 @@ body {
 
 header {
     text-align: center;
-    margin-bottom: 40px;
+    margin-bottom: 20px;
     padding: 40px 0;
     background: linear-gradient(135deg, var(--primary-color), var(--secondary-color));
     color: white;
     border-radius: 16px;
+}
+
+/* Navigation */
+.main-nav {
+    display: flex;
+    gap: 10px;
+    margin-bottom: 30px;
+    background: var(--card-bg);
+    padding: 10px;
+    border-radius: 12px;
+    box-shadow: 0 1px 3px rgba(0, 0, 0, 0.1);
+}
+
+.nav-btn {
+    flex: 1;
+    padding: 12px 24px;
+    border: none;
+    border-radius: 8px;
+    font-size: 1rem;
+    font-weight: 500;
+    cursor: pointer;
+    background: transparent;
+    color: var(--text-primary);
+    transition: all 0.3s;
+}
+
+.nav-btn:hover {
+    background-color: var(--bg-color);
+}
+
+.nav-btn.active {
+    background-color: var(--secondary-color);
+    color: white;
+}
+
+/* Page Management */
+.page {
+    display: none;
+}
+
+.page.active {
+    display: block;
 }
 
 h1 {
@@ -439,5 +481,180 @@ select:focus {
         min-width: 80px;
         padding: 15px 10px;
         font-size: 0.8rem;
+    }
+}
+
+/* Network Overview Styles */
+.network-overview {
+    padding: 10px 0;
+}
+
+.overview-section {
+    margin-bottom: 40px;
+}
+
+.overview-section h3 {
+    font-size: 1.4rem;
+    margin-bottom: 20px;
+    color: var(--primary-color);
+}
+
+.proposers-grid {
+    display: grid;
+    grid-template-columns: repeat(auto-fill, minmax(280px, 1fr));
+    gap: 15px;
+}
+
+.proposer-card {
+    background-color: var(--bg-color);
+    border: 1px solid var(--border-color);
+    border-radius: 8px;
+    padding: 15px;
+    transition: all 0.3s;
+}
+
+.proposer-card:hover {
+    box-shadow: 0 2px 8px rgba(0, 0, 0, 0.1);
+}
+
+.proposer-card.tracked {
+    background-color: #f0f9ff;
+    border-color: var(--secondary-color);
+}
+
+.proposer-header {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    margin-bottom: 12px;
+}
+
+.proposer-slot {
+    font-weight: 600;
+    color: var(--primary-color);
+}
+
+.validator-badge {
+    display: inline-block;
+    padding: 4px 12px;
+    border-radius: 20px;
+    color: white;
+    font-size: 0.85rem;
+    font-weight: 600;
+    margin: 0 4px;
+}
+
+.proposer-details {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: 10px;
+}
+
+.time-info, .blocks-info {
+    display: flex;
+    flex-direction: column;
+}
+
+.time-label, .blocks-label {
+    font-size: 0.8rem;
+    color: var(--text-secondary);
+    margin-bottom: 2px;
+}
+
+.time-value, .blocks-value {
+    font-weight: 500;
+    color: var(--text-primary);
+}
+
+.epoch-info {
+    text-align: center;
+    margin-bottom: 20px;
+    padding: 10px;
+    background-color: var(--bg-color);
+    border-radius: 8px;
+    color: var(--text-secondary);
+}
+
+.sync-period-info {
+    text-align: center;
+    margin-bottom: 20px;
+    padding: 15px;
+    background-color: var(--bg-color);
+    border-radius: 8px;
+    color: var(--text-primary);
+}
+
+.sync-detail {
+    font-size: 0.9rem;
+    color: var(--text-secondary);
+    margin: 5px 0;
+}
+
+.sync-validators {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 8px;
+    align-items: center;
+}
+
+.sync-committee-info {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: 30px;
+    max-width: 600px;
+}
+
+.sync-stat {
+    background-color: var(--bg-color);
+    padding: 25px;
+    border-radius: 12px;
+    text-align: center;
+    border: 1px solid var(--border-color);
+}
+
+.sync-stat h4 {
+    font-size: 1.1rem;
+    margin-bottom: 15px;
+    color: var(--text-primary);
+}
+
+.sync-count {
+    font-size: 2rem;
+    font-weight: 700;
+    color: var(--secondary-color);
+    margin-bottom: 10px;
+}
+
+.sync-epoch {
+    font-size: 0.95rem;
+    color: var(--text-secondary);
+}
+
+.tracked-sync-members {
+    margin-top: 30px;
+    padding: 20px;
+    background-color: #f0f9ff;
+    border-radius: 8px;
+    border: 1px solid var(--secondary-color);
+}
+
+.tracked-sync-members h4 {
+    margin-bottom: 10px;
+    color: var(--primary-color);
+}
+
+.tracked-sync-members p {
+    margin: 5px 0;
+    color: var(--text-primary);
+}
+
+@media (max-width: 768px) {
+    .proposers-grid {
+        grid-template-columns: 1fr;
+    }
+    
+    .sync-committee-info {
+        grid-template-columns: 1fr;
+        gap: 20px;
     }
 }
