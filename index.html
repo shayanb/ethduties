@@ -1,0 +1,143 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>ETH Validator Duties Tracker</title>
+    <link rel="stylesheet" href="styles.css">
+</head>
+<body>
+    <div class="container">
+        <header>
+            <h1>Ethereum Validator Duties Tracker</h1>
+            <p class="subtitle">Track upcoming duties for your validators</p>
+        </header>
+
+        <section class="beacon-config">
+            <h2>Beacon Node Configuration</h2>
+            <div class="config-form">
+                <div class="form-group">
+                    <label for="beaconUrl">Beacon Node URL:</label>
+                    <input type="text" id="beaconUrl" placeholder="http://localhost:5052" value="http://localhost:5052">
+                </div>
+                <div class="form-group">
+                    <label for="publicBeaconSelect">Or select a public beacon node:</label>
+                    <select id="publicBeaconSelect">
+                        <option value="">-- Select Public Node --</option>
+                    </select>
+                    <small>Note: Public nodes may have rate limits</small>
+                </div>
+            </div>
+        </section>
+
+        <section class="validators-section">
+            <h2>Add Validators</h2>
+            <div class="add-validator-form">
+                <div class="form-group">
+                    <label for="validatorInput">Validator Public Key or Index:</label>
+                    <input type="text" id="validatorInput" placeholder="0x... or validator index">
+                    <button id="addValidatorBtn" class="btn-primary">Add Validator</button>
+                </div>
+                <small>Tip: Use validator indices for better performance with many validators</small>
+            </div>
+
+            <div class="validators-list">
+                <h3>Tracked Validators</h3>
+                <ul id="validatorsList"></ul>
+            </div>
+        </section>
+
+        <section class="duties-section">
+            <h2>Upcoming Duties</h2>
+            <div id="epochInfo" style="text-align: center; color: var(--text-secondary); margin-bottom: 20px;"></div>
+            <div class="controls">
+                <button id="fetchDutiesBtn" class="btn-primary">Fetch Duties</button>
+                <button id="clearCacheBtn" class="btn-secondary">Clear Cache</button>
+                <div class="auto-refresh">
+                    <label>
+                        <input type="checkbox" id="autoRefresh">
+                        Auto-refresh every 30 seconds
+                    </label>
+                </div>
+            </div>
+
+            <div class="duties-display">
+                <div id="loadingIndicator" class="loading hidden">Loading duties...</div>
+                <div id="errorMessage" class="error-message hidden"></div>
+                
+                <div class="duties-tabs">
+                    <button class="tab-btn active" data-tab="proposer">Proposer Duties</button>
+                    <button class="tab-btn" data-tab="attester">Attester Duties</button>
+                    <button class="tab-btn" data-tab="sync">Sync Committee</button>
+                </div>
+
+                <div class="duties-content">
+                    <div id="proposerDuties" class="duty-panel active"></div>
+                    <div id="attesterDuties" class="duty-panel"></div>
+                    <div id="syncDuties" class="duty-panel"></div>
+                </div>
+            </div>
+        </section>
+
+        <section class="notifications-section">
+            <h2>Notifications</h2>
+            <div class="notification-options">
+                <div class="notification-type">
+                    <h3>Browser Notifications</h3>
+                    <button id="enableBrowserNotifications" class="btn-primary">Enable Browser Notifications</button>
+                    <p class="notification-status" id="browserNotificationStatus"></p>
+                </div>
+                
+                <div class="notification-type">
+                    <h3>Telegram Notifications</h3>
+                    <div class="form-group">
+                        <label for="telegramChatId">Telegram Chat ID:</label>
+                        <input type="text" id="telegramChatId" placeholder="Enter your chat ID">
+                        <small>Start a chat with the bot and send /start to get your chat ID</small>
+                    </div>
+                    <button id="enableTelegramNotifications" class="btn-primary">Enable Telegram Notifications</button>
+                    <button id="updateTelegramSubscription" class="btn-secondary" style="display: none;">Update Subscription</button>
+                    <p class="notification-status" id="telegramNotificationStatus"></p>
+                </div>
+                
+                <div class="notification-settings">
+                    <h3>Notification Settings</h3>
+                    <div class="form-group">
+                        <label>
+                            <input type="checkbox" id="notifyProposer" checked>
+                            Notify for proposer duties
+                        </label>
+                    </div>
+                    <div class="form-group">
+                        <label>
+                            <input type="checkbox" id="notifyAttester" checked>
+                            Notify for attester duties
+                        </label>
+                    </div>
+                    <div class="form-group">
+                        <label>
+                            <input type="checkbox" id="notifySync" checked>
+                            Notify for sync committee duties
+                        </label>
+                    </div>
+                    <div class="form-group">
+                        <label for="notifyMinutes">Notify when duty is within:</label>
+                        <select id="notifyMinutes">
+                            <option value="5">5 minutes</option>
+                            <option value="10" selected>10 minutes</option>
+                            <option value="30">30 minutes</option>
+                            <option value="60">1 hour</option>
+                        </select>
+                    </div>
+                </div>
+            </div>
+        </section>
+
+        <footer>
+            <p>Data cached in session storage | Inspired by <a href="https://github.com/TobiWo/eth-duties" target="_blank">eth-duties</a></p>
+        </footer>
+    </div>
+
+    <script src="app.js"></script>
+</body>
+</html>
