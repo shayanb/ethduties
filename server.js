@@ -343,6 +343,10 @@ app.post('/api/notify', async (req, res) => {
             } else if (type === 'Sync Committee') {
                 title = '🔐💎 SYNC COMMITTEE 💎🔐';
                 body = `Validator ${validatorDisplay || validator} - Active now`;
+            } else if (type === 'Block Confirmed' && duty.blockDetails) {
+                title = '🎉💰 BLOCK CONFIRMED! 🎉💰';
+                const details = duty.blockDetails;
+                body = `${validatorDisplay || validator} - ${details.totalReward.toFixed(3)} ETH earned! (${details.txCount} txs)`;
             } else {
                 title = `${type} Duty`;
                 body = `Validator ${validatorDisplay || validator} - ${duty.timeUntil}`;

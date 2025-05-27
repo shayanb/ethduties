@@ -838,6 +838,232 @@ select:focus {
     }
 }
 
+/* Block details styles */
+.block-details {
+    margin-top: 15px;
+    padding-top: 15px;
+    border-top: 1px solid var(--border-color);
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(120px, 1fr));
+    gap: 10px;
+}
+
+.block-stat {
+    display: flex;
+    flex-direction: column;
+    gap: 4px;
+}
+
+.block-stat-label {
+    font-size: 0.85rem;
+    color: var(--text-secondary);
+    font-weight: 500;
+}
+
+.block-stat-value {
+    font-size: 1rem;
+    font-weight: 600;
+    color: var(--text-primary);
+}
+
+.block-stat.graffiti {
+    grid-column: 1 / -1;
+}
+
+.block-stat.graffiti .block-stat-value {
+    font-family: monospace;
+    font-size: 0.9rem;
+    background-color: var(--bg-secondary);
+    padding: 4px 8px;
+    border-radius: 4px;
+    word-break: break-all;
+}
+
+/* Previous blocks section */
+.previous-blocks-section {
+    margin-bottom: 25px;
+    background-color: var(--bg-secondary);
+    border-radius: 8px;
+    padding: 15px;
+    border: 1px solid var(--border-color);
+}
+
+.section-header {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    margin-bottom: 15px;
+}
+
+.section-header h3 {
+    margin: 0;
+    color: var(--text-primary);
+    font-size: 1.1rem;
+}
+
+.clear-btn {
+    background: var(--danger-color);
+    color: white;
+    border: none;
+    border-radius: 50%;
+    width: 24px;
+    height: 24px;
+    cursor: pointer;
+    font-size: 16px;
+    font-weight: bold;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    transition: all 0.2s;
+}
+
+.clear-btn:hover {
+    background: #dc2626;
+    transform: scale(1.1);
+}
+
+.previous-blocks-container {
+    display: flex;
+    flex-direction: column;
+    gap: 10px;
+}
+
+.previous-block-item {
+    background: white;
+    border: 1px solid var(--border-color);
+    border-radius: 6px;
+    padding: 12px;
+    transition: all 0.2s;
+}
+
+.previous-block-item:hover {
+    box-shadow: 0 2px 8px rgba(0, 0, 0, 0.1);
+    transform: translateY(-1px);
+}
+
+.block-header {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    margin-bottom: 8px;
+}
+
+.block-title {
+    color: var(--primary-color);
+    text-decoration: none;
+    font-weight: 600;
+    font-size: 1.1rem;
+}
+
+.block-title:hover {
+    text-decoration: underline;
+}
+
+.block-actions {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+}
+
+.block-time {
+    color: var(--text-secondary);
+    font-size: 0.85rem;
+}
+
+.clear-single-btn {
+    background: var(--danger-color);
+    color: white;
+    border: none;
+    border-radius: 50%;
+    width: 20px;
+    height: 20px;
+    cursor: pointer;
+    font-size: 14px;
+    font-weight: bold;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    transition: all 0.2s;
+}
+
+.clear-single-btn:hover {
+    background: #dc2626;
+    transform: scale(1.1);
+}
+
+.block-info {
+    display: flex;
+    gap: 15px;
+    flex-wrap: wrap;
+}
+
+.block-stat-mini {
+    font-size: 0.85rem;
+    color: var(--text-secondary);
+    background: var(--bg-secondary);
+    padding: 4px 8px;
+    border-radius: 4px;
+}
+
+/* Beacon node error banner */
+.beacon-error-banner {
+    position: fixed;
+    top: 0;
+    left: 0;
+    right: 0;
+    background: #fee2e2;
+    border-bottom: 2px solid #fca5a5;
+    z-index: 1000;
+    animation: slideDown 0.3s ease-out;
+}
+
+.error-content {
+    max-width: 1200px;
+    margin: 0 auto;
+    padding: 12px 20px;
+    display: flex;
+    align-items: center;
+    gap: 12px;
+}
+
+.error-icon {
+    font-size: 1.2rem;
+}
+
+.error-text {
+    flex: 1;
+    color: #991b1b;
+    font-weight: 500;
+}
+
+.error-close {
+    background: #dc2626;
+    color: white;
+    border: none;
+    border-radius: 50%;
+    width: 24px;
+    height: 24px;
+    cursor: pointer;
+    font-size: 16px;
+    font-weight: bold;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+}
+
+.error-close:hover {
+    background: #b91c1c;
+}
+
+@keyframes slideDown {
+    from {
+        transform: translateY(-100%);
+    }
+    to {
+        transform: translateY(0);
+    }
+}
+
 .validator-badge {
     display: inline-block;
     padding: 4px 12px;

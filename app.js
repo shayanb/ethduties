@@ -34,6 +34,7 @@ class ValidatorDutiesTracker {
         // Initialize validators after setting up colors
         this.validators = this.loadValidators();
         this.loadNotifiedDuties();
+        this.loadBlockDetails();
         
         this.initializeEventListeners();
         this.renderValidators();
@@ -365,13 +366,14 @@ class ValidatorDutiesTracker {
         document.querySelectorAll('.duty-time').forEach(element => {
             const slot = parseInt(element.dataset.slot);
             const dutyType = element.dataset.dutyType;
+            const validator = element.dataset.validator;
             if (slot) {
                 const timeUntil = this.getTimeUntilSlot(slot);
                 
                 // Check if block was just proposed by one of our validators
-                if (dutyType === 'proposer' && slot === currentSlot && !element.dataset.celebrated) {
+                if (dutyType === 'proposer' && slot === currentSlot && !element.dataset.celebrated && validator) {
                     element.dataset.celebrated = 'true';
-                    this.celebrateBlockProposal(element);
+                    this.celebrateBlockProposal(element, slot, validator);
                 }
                 
                 if (slot < currentSlot) {
@@ -441,7 +443,7 @@ class ValidatorDutiesTracker {
         });
     }
     
-    celebrateBlockProposal(element) {
+    celebrateBlockProposal(element, slot, validator) {
         // Trigger confetti
         if (window.confetti) {
             confetti({
@@ -457,6 +459,258 @@ class ValidatorDutiesTracker {
         setTimeout(() => {
             element.classList.remove('celebrating');
         }, 3000);
+        
+        // Fetch block details after a short delay to ensure block is available
+        if (slot && validator) {
+            setTimeout(() => {
+                this.fetchBlockDetails(slot, validator, element);
+            }, 5000); // Increased delay to 5 seconds for block availability
+        } else {
+            console.error('Missing slot or validator for block details fetch', {slot, validator});
+        }
+    }
+    
+    async fetchBlockDetails(slot, validator, element, retryCount = 0) {
+        try {
+            console.log(`Fetching block details for slot ${slot} (attempt ${retryCount + 1})`);
+            
+            // Fetch block details from beacon chain
+            const response = await fetch(`${this.serverUrl}/api/beacon/eth/v2/beacon/blocks/${slot}`, {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ beaconUrl: this.beaconUrl })
+            });
+            
+            if (!response.ok) {
+                const errorText = await response.text();
+                
+                // If beacon node is unavailable, show user-friendly error
+                if (response.status === 500 && errorText.includes('ECONNREFUSED')) {
+                    this.showBeaconNodeError();
+                    return;
+                }
+                
+                if (retryCount < 3) {
+                    console.log(`Block not ready yet, retrying in 3 seconds...`);
+                    setTimeout(() => {
+                        this.fetchBlockDetails(slot, validator, element, retryCount + 1);
+                    }, 3000);
+                } else {
+                    console.error('Failed to fetch block details after 3 retries');
+                }
+                return;
+            }
+            
+            const blockData = await response.json();
+            if (!blockData.data) return;
+            
+            const block = blockData.data.message;
+            const graffiti = block.body.graffiti ? 
+                new TextDecoder().decode(Uint8Array.from(atob(block.body.graffiti), c => c.charCodeAt(0))).replace(/\0/g, '') : 
+                '';
+            
+            // Fetch execution payload for MEV and fees
+            const executionPayload = block.body.execution_payload;
+            let txReward = 0; // Priority fees from transactions (tips)
+            let mevReward = 0; // MEV block reward
+            let burnedFees = 0; // Base fee burned
+            let txCount = 0;
+            
+            console.log('=== BLOCK DETAILS DEBUG ===');
+            console.log('Slot:', slot);
+            console.log('Validator:', validator);
+            console.log('Block data:', blockData);
+            
+            if (executionPayload) {
+                txCount = executionPayload.transactions.length;
+                console.log('Execution payload:', executionPayload);
+                console.log('Transaction count:', txCount);
+                
+                // Calculate burned fees (base fee * gas used)
+                const baseFeePerGas = BigInt(executionPayload.base_fee_per_gas || '0');
+                const gasUsed = BigInt(executionPayload.gas_used || '0');
+                burnedFees = Number(baseFeePerGas * gasUsed) / 1e18;
+                
+                console.log('Base fee per gas:', executionPayload.base_fee_per_gas);
+                console.log('Gas used:', executionPayload.gas_used);
+                console.log('Burned fees (ETH):', burnedFees);
+                
+                // Get the actual block reward
+                // This is typically in the execution payload header or consensus rewards
+                if (executionPayload.block_hash) {
+                    // Try to fetch additional reward info from execution layer
+                    console.log('Block hash:', executionPayload.block_hash);
+                    console.log('Fee recipient:', executionPayload.fee_recipient);
+                }
+                
+                // Check withdrawals for validator rewards/MEV
+                if (executionPayload.withdrawals && executionPayload.withdrawals.length > 0) {
+                    console.log('Withdrawals found:', executionPayload.withdrawals);
+                    executionPayload.withdrawals.forEach((withdrawal, index) => {
+                        const withdrawalAmount = Number(BigInt(withdrawal.amount || '0')) / 1e9; // Gwei to ETH
+                        console.log(`Withdrawal ${index}:`, {
+                            validator_index: withdrawal.validator_index,
+                            amount_gwei: withdrawal.amount,
+                            amount_eth: withdrawalAmount,
+                            address: withdrawal.address
+                        });
+                        
+                        // Check if this withdrawal is for our validator
+                        if (withdrawal.validator_index === validator.toString()) {
+                            mevReward += withdrawalAmount;
+                            console.log('Adding MEV reward for our validator:', withdrawalAmount);
+                        }
+                    });
+                }
+                
+                // Calculate transaction fees (priority fees/tips)
+                // The proposer gets the priority fees from all transactions
+                if (executionPayload.transactions && executionPayload.transactions.length > 0) {
+                    // We can't easily calculate individual tx priority fees without full tx data
+                    // Use block value if available, otherwise estimate
+                    if (executionPayload.block_value) {
+                        const totalBlockValue = Number(BigInt(executionPayload.block_value)) / 1e18;
+                        console.log('Block value (ETH):', totalBlockValue);
+                        
+                        // Block value should be the total reward to proposer
+                        // This includes priority fees but not MEV (which comes via withdrawals)
+                        txReward = totalBlockValue;
+                        console.log('Transaction reward from block value:', txReward);
+                    } else {
+                        // Fallback: estimate priority fees
+                        // In normal conditions, priority fees are roughly 5-15% of base fee
+                        txReward = burnedFees * 0.1; // Conservative 10% estimate
+                        console.log('Estimated transaction reward (10% of burned):', txReward);
+                    }
+                } else {
+                    console.log('No transactions in block');
+                }
+                
+                console.log('Final calculations:');
+                console.log('- TX Reward (ETH):', txReward);
+                console.log('- MEV Reward (ETH):', mevReward);
+                console.log('- Burned Fees (ETH):', burnedFees);
+                console.log('- Total Reward (ETH):', txReward + mevReward);
+            } else {
+                console.log('No execution payload found');
+            }
+            
+            // Store block details
+            if (!this.blockDetails) this.blockDetails = {};
+            
+            // Check if we already have details for this slot to prevent duplicates
+            if (this.blockDetails[slot]) {
+                console.log('Block details already exist for slot', slot, '- skipping duplicate processing');
+                return;
+            }
+            
+            this.blockDetails[slot] = {
+                graffiti: graffiti || '',
+                txReward: txReward || 0,
+                mevReward: mevReward || 0,
+                burnedFees: burnedFees || 0,
+                totalReward: (txReward || 0) + (mevReward || 0),
+                txCount: txCount || 0,
+                feeRecipient: executionPayload ? executionPayload.fee_recipient : '',
+                timestamp: new Date().toISOString()
+            };
+            
+            // Save to session storage for persistence
+            sessionStorage.setItem('blockDetails', JSON.stringify(this.blockDetails));
+            
+            // Update the proposer duties display
+            this.displayProposerDuties();
+            
+            // Send notification with block details
+            await this.sendBlockDetailsNotification(slot, validator, {
+                graffiti,
+                txReward,
+                mevReward,
+                burnedFees,
+                totalReward: txReward + mevReward,
+                txCount,
+                feeRecipient: executionPayload ? executionPayload.fee_recipient : ''
+            });
+            
+        } catch (error) {
+            console.error('Error fetching block details:', error);
+        }
+    }
+    
+    async sendBlockDetailsNotification(slot, validator, details) {
+        const telegramEnabled = sessionStorage.getItem('telegramEnabled') === 'true';
+        const telegramChatId = sessionStorage.getItem('telegramChatId');
+        const browserEnabled = sessionStorage.getItem('browserNotifications') === 'true';
+        
+        // Get validator display
+        let validatorDisplay = `#${validator}`;
+        // Try to get pubkey from duties
+        const proposerDuty = this.duties.proposer.find(d => d.validator === validator.toString());
+        if (proposerDuty && proposerDuty.pubkey) {
+            validatorDisplay = `#${validator} (${proposerDuty.pubkey.slice(0, 10)})`;
+        }
+        
+        // Send Telegram notification
+        console.log('Checking Telegram notification conditions:');
+        console.log('- telegramEnabled:', telegramEnabled);
+        console.log('- telegramChatId:', telegramChatId);
+        
+        if (telegramEnabled && telegramChatId) {
+            try {
+                const message = `🎉💰 BLOCK CONFIRMED! 🎉💰\n\n` +
+                    `Validator ${validatorDisplay}\n` +
+                    `Slot: [${slot}](https://beaconcha.in/slot/${slot})\n\n` +
+                    `📊 Block Details:\n` +
+                    `🔥 Burned Fees: ${details.burnedFees.toFixed(4)} ETH\n` +
+                    `💰 Fee Recipient: ${details.feeRecipient ? `${details.feeRecipient.slice(0, 10)}...${details.feeRecipient.slice(-8)}` : 'Unknown'}\n\n` +
+                    `🎊 Congratulations! 🎊`;
+                
+                console.log('Sending Telegram block details notification:', message);
+                
+                const response = await fetch(`${this.serverUrl}/api/notify/telegram`, {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ 
+                        chatId: telegramChatId, 
+                        message 
+                    })
+                });
+                
+                if (!response.ok) {
+                    const errorText = await response.text();
+                    console.error('Telegram block details notification failed:', response.status, errorText);
+                } else {
+                    console.log('Telegram block details notification sent successfully');
+                }
+            } catch (error) {
+                console.error('Error sending Telegram block details notification:', error);
+            }
+        } else {
+            console.log('Telegram notification not sent - conditions not met');
+        }
+        
+        // Send browser notification
+        if (browserEnabled && this.pushSubscription) {
+            try {
+                await fetch(`${this.serverUrl}/api/notify`, {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({
+                        type: 'Block Confirmed',
+                        validator: validator,
+                        validatorDisplay,
+                        duty: {
+                            slot: slot,
+                            timeUntil: 'confirmed',
+                            blockDetails: details
+                        },
+                        urgency: 'success'
+                    })
+                });
+            } catch (error) {
+                console.error('Error sending browser block details notification:', error);
+            }
+        }
     }
 
     checkForUpcomingDuties() {
@@ -617,6 +871,34 @@ class ValidatorDutiesTracker {
         sessionStorage.setItem('validators', JSON.stringify(this.validators));
     }
     
+    loadBlockDetails() {
+        const stored = sessionStorage.getItem('blockDetails');
+        if (stored) {
+            try {
+                this.blockDetails = JSON.parse(stored);
+            } catch (error) {
+                console.error('Error loading block details:', error);
+                this.blockDetails = {};
+            }
+        } else {
+            this.blockDetails = {};
+        }
+    }
+    
+    clearBlockDetails() {
+        this.blockDetails = {};
+        sessionStorage.removeItem('blockDetails');
+        this.displayProposerDuties();
+    }
+    
+    clearSingleBlock(slot) {
+        if (this.blockDetails && this.blockDetails[slot]) {
+            delete this.blockDetails[slot];
+            sessionStorage.setItem('blockDetails', JSON.stringify(this.blockDetails));
+            this.displayProposerDuties();
+        }
+    }
+    
     loadNotifiedDuties() {
         const stored = sessionStorage.getItem('notifiedDuties');
         if (stored) {
@@ -717,13 +999,24 @@ class ValidatorDutiesTracker {
     
     async getValidatorInfo(validator) {
         try {
+            console.log(`Fetching validator info for: ${validator} from beacon: ${this.beaconUrl}`);
+            
             const response = await fetch(`${this.serverUrl}/api/beacon/eth/v1/beacon/states/head/validators/${validator}`, {
                 method: 'POST',
                 headers: { 'Content-Type': 'application/json' },
                 body: JSON.stringify({ beaconUrl: this.beaconUrl })
             });
             
-            if (!response.ok) return null;
+            if (!response.ok) {
+                const errorText = await response.text();
+                console.error(`Failed to fetch validator info for ${validator}:`, response.status, errorText);
+                
+                // If beacon node is unavailable, show user-friendly error
+                if (response.status === 500 && errorText.includes('ECONNREFUSED')) {
+                    this.showBeaconNodeError();
+                }
+                return null;
+            }
             
             const data = await response.json();
             return data.data ? {
@@ -731,8 +1024,36 @@ class ValidatorDutiesTracker {
                 pubkey: data.data.validator.pubkey
             } : null;
         } catch (error) {
+            console.error(`Error fetching validator info for ${validator}:`, error);
             return null;
         }
+    }
+    
+    showBeaconNodeError() {
+        // Prevent multiple error notifications
+        if (this.beaconErrorShown) return;
+        this.beaconErrorShown = true;
+        
+        // Show user-friendly error message
+        const errorDiv = document.createElement('div');
+        errorDiv.className = 'beacon-error-banner';
+        errorDiv.innerHTML = `
+            <div class="error-content">
+                <span class="error-icon">⚠️</span>
+                <span class="error-text">Cannot connect to beacon node at ${this.beaconUrl}. Please check your beacon node configuration.</span>
+                <button onclick="this.parentElement.parentElement.remove(); app.beaconErrorShown = false;" class="error-close">×</button>
+            </div>
+        `;
+        
+        document.body.prepend(errorDiv);
+        
+        // Auto-hide after 10 seconds
+        setTimeout(() => {
+            if (errorDiv.parentElement) {
+                errorDiv.remove();
+                this.beaconErrorShown = false;
+            }
+        }, 10000);
     }
 
     assignValidatorColor(validator) {
@@ -909,6 +1230,13 @@ class ValidatorDutiesTracker {
             });
             
             if (!response.ok) {
+                const errorText = await response.text();
+                
+                // If beacon node is unavailable, show user-friendly error
+                if (response.status === 500 && errorText.includes('ECONNREFUSED')) {
+                    this.showBeaconNodeError();
+                }
+                
                 throw new Error(`HTTP error! status: ${response.status}`);
             }
             
@@ -934,6 +1262,13 @@ class ValidatorDutiesTracker {
             });
             
             if (!response.ok) {
+                const errorText = await response.text();
+                
+                // If beacon node is unavailable, show user-friendly error
+                if (response.status === 500 && errorText.includes('ECONNREFUSED')) {
+                    this.showBeaconNodeError();
+                }
+                
                 throw new Error(`HTTP error! status: ${response.status}`);
             }
             
@@ -977,6 +1312,12 @@ class ValidatorDutiesTracker {
             if (!response.ok) {
                 const errorText = await response.text();
                 console.error('Attester duties error response:', errorText);
+                
+                // If beacon node is unavailable, show user-friendly error
+                if (response.status === 500 && errorText.includes('ECONNREFUSED')) {
+                    this.showBeaconNodeError();
+                }
+                
                 throw new Error(`HTTP error! status: ${response.status}`);
             }
             
@@ -1014,6 +1355,18 @@ class ValidatorDutiesTracker {
                     epoch
                 })
             });
+            
+            if (!response.ok) {
+                const errorText = await response.text();
+                
+                // If beacon node is unavailable, show user-friendly error
+                if (response.status === 500 && errorText.includes('ECONNREFUSED')) {
+                    this.showBeaconNodeError();
+                }
+                
+                throw new Error(`HTTP error! status: ${response.status}`);
+            }
+            
             const data = await response.json();
             return data.data || [];
         } catch (error) {
@@ -1084,13 +1437,16 @@ class ValidatorDutiesTracker {
     displayProposerDuties() {
         const panel = document.getElementById('proposerDuties');
         
+        // Always show previous blocks section first
+        const previousBlocksHtml = this.renderPreviousBlocks();
+        
         if (this.validators.length === 0) {
-            panel.innerHTML = '<p style="text-align: center; color: var(--text-secondary);">Add validators to see duties</p>';
+            panel.innerHTML = previousBlocksHtml + '<p style="text-align: center; color: var(--text-secondary);">Add validators to see duties</p>';
             return;
         }
         
         if (this.duties.proposer.length === 0) {
-            panel.innerHTML = `
+            panel.innerHTML = previousBlocksHtml + `
                 <div style="text-align: center; padding: 20px;">
                     <p style="color: var(--text-secondary); margin-bottom: 10px;">No proposer duties found for your validators in the current epoch</p>
                     <p style="color: var(--text-secondary); font-size: 0.9rem;">This is normal - proposer duties are randomly assigned</p>
@@ -1119,11 +1475,58 @@ class ValidatorDutiesTracker {
         const recentPastDuties = pastDuties.slice(0, 3);
         
         const html = [
+            previousBlocksHtml,
             ...recentPastDuties.map(duty => this.renderProposerDuty(duty, true)),
             ...futureDuties.map(duty => this.renderProposerDuty(duty, false))
         ].join('');
         
         panel.innerHTML = html || '<p style="text-align: center; color: var(--text-secondary);">No duties to display</p>';
+    }
+    
+    renderPreviousBlocks() {
+        if (!this.blockDetails || Object.keys(this.blockDetails).length === 0) {
+            return '';
+        }
+        
+        // Sort blocks by slot number (most recent first)
+        const sortedBlocks = Object.entries(this.blockDetails)
+            .sort((a, b) => parseInt(b[0]) - parseInt(a[0]));
+        
+        const blocksHtml = sortedBlocks.map(([slot, details]) => {
+            const feeRecipientDisplay = details.feeRecipient ? 
+                `${details.feeRecipient.slice(0, 10)}...${details.feeRecipient.slice(-8)}` : 
+                'Unknown';
+            
+            return `
+                <div class="previous-block-item">
+                    <div class="block-header">
+                        <a href="https://beaconcha.in/block/${slot}" target="_blank" class="block-title">
+                            Block ${slot}
+                        </a>
+                        <div class="block-actions">
+                            <span class="block-time">${new Date(details.timestamp).toLocaleTimeString()}</span>
+                            <button onclick="app.clearSingleBlock('${slot}')" class="clear-single-btn" title="Remove this block">×</button>
+                        </div>
+                    </div>
+                    <div class="block-info">
+                        <span class="block-stat-mini">🔥 ${(details.burnedFees || 0).toFixed(4)} ETH</span>
+                        <span class="block-stat-mini">💰 ${feeRecipientDisplay}</span>
+                    </div>
+                </div>
+            `;
+        }).join('');
+        
+        return `
+            <div class="previous-blocks-section">
+                <div class="section-header">
+                    <h3>Previous Blocks</h3>
+                    <button onclick="app.clearBlockDetails()" class="clear-btn" title="Clear all block history">×</button>
+                </div>
+                <div class="previous-blocks-container">
+                    ${blocksHtml}
+                </div>
+            </div>
+        `;
     }
     
     renderProposerDuty(duty, isPast = false) {
@@ -1138,17 +1541,45 @@ class ValidatorDutiesTracker {
             ? `<a href="https://beaconcha.in/validator/${duty.validator_index}" target="_blank" class="validator-tag" style="background-color: ${color}" title="View on beaconcha.in">${label}</a>`
             : `<div class="validator-tag" style="background-color: ${color}" title="${duty.pubkey}">${label}</div>`;
         
+        // Check if we have block details for this slot
+        let blockDetailsHtml = '';
+        if (this.blockDetails && this.blockDetails[duty.slot]) {
+            const details = this.blockDetails[duty.slot];
+            const feeRecipientDisplay = details.feeRecipient ? 
+                `${details.feeRecipient.slice(0, 10)}...${details.feeRecipient.slice(-8)}` : 
+                'Unknown';
+                
+            blockDetailsHtml = `
+                <div class="block-details">
+                    <div class="block-header">
+                        <a href="https://beaconcha.in/block/${duty.slot}" target="_blank" class="block-link">
+                            📊 View Block ${duty.slot}
+                        </a>
+                    </div>
+                    <div class="block-stat">
+                        <span class="block-stat-label">🔥 Burned:</span>
+                        <span class="block-stat-value">${(details.burnedFees || 0).toFixed(4)} ETH</span>
+                    </div>
+                    <div class="block-stat">
+                        <span class="block-stat-label">💰 Fee Recipient:</span>
+                        <span class="block-stat-value">${feeRecipientDisplay}</span>
+                    </div>
+                </div>
+            `;
+        }
+        
         return `
             <div class="duty-item proposer ${urgencyClass}">
                 ${validatorTag}
                 <div class="duty-content">
                     <div class="duty-header">
                         <span class="duty-type">Block Proposal${isPast ? ' ✓' : ''}</span>
-                        <span class="duty-time" ${!isPast ? `data-slot="${duty.slot}" data-duty-type="proposer"` : ''}>${timeDisplay}</span>
+                        <span class="duty-time" ${!isPast ? `data-slot="${duty.slot}" data-duty-type="proposer" data-validator="${validator || duty.validator_index || ''}"` : ''}>${timeDisplay}</span>
                     </div>
                     <div class="duty-details">
                         <span class="slot-number">Slot ${duty.slot}</span>
                     </div>
+                    ${blockDetailsHtml}
                 </div>
             </div>
         `;
