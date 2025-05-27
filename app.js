@@ -2,7 +2,7 @@ class ValidatorDutiesTracker {
     constructor() {
         // Load beacon URL from storage or use default
         this.beaconUrl = sessionStorage.getItem('beaconUrl') || 'http://localhost:5052';
-        this.serverUrl = 'http://localhost:3000';
+        this.serverUrl = window.APP_CONFIG?.serverUrl || 'http://localhost:3000';
         this.publicBeaconUrls = [
             { name: 'PublicNode', url: 'https://ethereum-beacon-api.publicnode.com' },
             { name: 'Ankr', url: 'https://rpc.ankr.com/eth_beacon' },
@@ -299,6 +299,40 @@ class ValidatorDutiesTracker {
                 const dutyItem = element.closest('.duty-item');
                 if (dutyItem) {
                     dutyItem.className = `duty-item ${element.dataset.dutyType || ''} ${this.getUrgencyClass(timeUntil)}`;
+                }
+            }
+        });
+        
+        // Update network overview countdowns
+        const currentSlot = this.getCurrentSlotSync();
+        document.querySelectorAll('.time-to-block').forEach(element => {
+            const slot = parseInt(element.dataset.slot);
+            if (slot) {
+                const timeUntil = this.getTimeUntilSlot(slot);
+                const blocksFromNow = slot - currentSlot;
+                const isPast = blocksFromNow < 0;
+                
+                let timeDisplay;
+                if (isPast) {
+                    timeDisplay = `Passed ${this.formatTimeAgo(-timeUntil)} ago`;
+                } else {
+                    timeDisplay = this.formatTimeUntil(timeUntil);
+                }
+                
+                const blocksDisplay = isPast 
+                    ? `${Math.abs(blocksFromNow)} blocks ago`
+                    : `in ${blocksFromNow} block${blocksFromNow !== 1 ? 's' : ''}`;
+                
+                element.textContent = `${timeDisplay}, ${blocksDisplay}`;
+                
+                // Update past class on proposer card
+                const card = element.closest('.proposer-card');
+                if (card) {
+                    if (isPast && !card.classList.contains('past')) {
+                        card.classList.add('past');
+                    } else if (!isPast && card.classList.contains('past')) {
+                        card.classList.remove('past');
+                    }
                 }
             }
         });
@@ -806,9 +840,13 @@ class ValidatorDutiesTracker {
         const label = this.getValidatorLabel(validator);
         const timeDisplay = isPast ? this.formatTimeAgo(-timeUntil) : this.formatTimeUntil(timeUntil);
         
+        const validatorTag = duty.validator_index 
+            ? `<a href="https://beaconcha.in/validator/${duty.validator_index}" target="_blank" class="validator-tag" style="background-color: ${color}" title="View on beaconcha.in">${label}</a>`
+            : `<div class="validator-tag" style="background-color: ${color}" title="${duty.pubkey}">${label}</div>`;
+        
         return `
             <div class="duty-item proposer ${urgencyClass}">
-                <div class="validator-tag" style="background-color: ${color}">${label}</div>
+                ${validatorTag}
                 <div class="duty-content">
                     <div class="duty-header">
                         <span class="duty-type">Block Proposal${isPast ? ' ✓' : ''}</span>
@@ -929,83 +967,46 @@ class ValidatorDutiesTracker {
         const currentSlot = this.getCurrentSlotSync();
         const currentEpoch = Math.floor(currentSlot / 32);
         
-        // Sort upcoming proposers by slot
-        const upcomingProposers = this.networkOverview.allProposers
+        // Get both past and upcoming proposers
+        const allProposersSort = this.networkOverview.allProposers.sort((a, b) => a.slot - b.slot);
+        const pastProposers = allProposersSort
+            .filter(duty => duty.slot < currentSlot)
+            .slice(-10); // Show last 10 past blocks
+        const upcomingProposers = allProposersSort
             .filter(duty => duty.slot >= currentSlot)
-            .sort((a, b) => a.slot - b.slot)
-            .slice(0, 64); // Show next 2 epochs
+            .slice(0, 54); // Show next 54 blocks (total 64 with past)
         
-        // Count sync committee members
+        // Combine past and upcoming
+        const displayProposers = [...pastProposers, ...upcomingProposers];
+        
+        // Sync committee calculations
         const syncCommitteeSize = this.networkOverview.currentSyncCommittee.length;
         const nextSyncSize = this.networkOverview.nextSyncCommittee.length;
         const syncPeriod = Math.floor(currentEpoch / 256);
         const epochsInPeriod = currentEpoch % 256;
         const epochsRemaining = 256 - epochsInPeriod;
+        const timeRemaining = epochsRemaining * 32 * 12 * 1000; // epochs * slots * seconds * ms
         
         let html = `
             <div class="network-overview">
-                <div class="overview-section">
-                    <h3>Upcoming Block Proposers</h3>
-                    <div class="epoch-info">
-                        Current Slot: ${currentSlot} | Current Epoch: ${currentEpoch}
-                    </div>
-                    <div class="proposers-grid">
-        `;
-        
-        if (upcomingProposers.length === 0) {
-            html += '<p style="text-align: center; color: var(--text-secondary);">No proposer data available</p>';
-        } else {
-            upcomingProposers.forEach(duty => {
-                const timeUntil = this.getTimeUntilSlot(duty.slot);
-                const blocksFromNow = duty.slot - currentSlot;
-                const isTracked = this.validators.includes(duty.pubkey) || 
-                                this.validators.includes(duty.validator_index?.toString());
-                const validator = isTracked ? this.getValidatorForDuty(duty) : null;
-                const color = validator ? this.getValidatorColor(validator) : '#94a3b8';
-                const label = duty.validator_index ? `#${duty.validator_index}` : this.truncateAddress(duty.pubkey);
-                
-                html += `
-                    <div class="proposer-card ${isTracked ? 'tracked' : ''}">
-                        <div class="proposer-header">
-                            <span class="proposer-slot">Slot ${duty.slot}</span>
-                            <span class="validator-badge" style="background-color: ${color}">${label}</span>
-                        </div>
-                        <div class="proposer-details">
-                            <div class="time-info">
-                                <span class="time-label">Time:</span>
-                                <span class="time-value">${this.formatTimeUntil(timeUntil)}</span>
-                            </div>
-                            <div class="blocks-info">
-                                <span class="blocks-label">Blocks:</span>
-                                <span class="blocks-value">+${blocksFromNow}</span>
-                            </div>
+                <!-- Sync Committee Info at Top -->
+                <div class="sync-committee-summary">
+                    <div class="sync-summary-item" title="Period ${syncPeriod} | Epochs ${syncPeriod * 256} - ${(syncPeriod + 1) * 256 - 1}">
+                        <div class="sync-summary-header">Current Sync Committee</div>
+                        <div class="sync-summary-content">
+                            <span class="sync-validators-count">${syncCommitteeSize}</span> validators
+                            <span class="sync-time-remaining">
+                                ${this.formatTimeUntil(timeRemaining)} (${epochsRemaining} epochs)
+                            </span>
                         </div>
                     </div>
-                `;
-            });
-        }
-        
-        html += `
-                    </div>
-                </div>
-                
-                <div class="overview-section">
-                    <h3>Sync Committee Information</h3>
-                    <div class="sync-period-info">
-                        <p>Current Period: ${syncPeriod} | Epochs in Period: ${epochsInPeriod}/256 | Remaining: ${epochsRemaining} epochs</p>
-                    </div>
-                    <div class="sync-committee-info">
-                        <div class="sync-stat">
-                            <h4>Current Sync Committee</h4>
-                            <p class="sync-count">${syncCommitteeSize} validators</p>
-                            <p class="sync-detail">Period ${syncPeriod}</p>
-                            <p class="sync-detail">Epochs ${syncPeriod * 256} - ${(syncPeriod + 1) * 256 - 1}</p>
-                        </div>
-                        <div class="sync-stat">
-                            <h4>Next Sync Committee</h4>
-                            <p class="sync-count">${nextSyncSize} validators</p>
-                            <p class="sync-detail">Period ${syncPeriod + 1}</p>
-                            <p class="sync-detail">Starts in ${epochsRemaining} epochs</p>
+                    <div class="sync-summary-item" title="Period ${syncPeriod + 1} | Starts at epoch ${(syncPeriod + 1) * 256}">
+                        <div class="sync-summary-header">Next Sync Committee</div>
+                        <div class="sync-summary-content">
+                            <span class="sync-validators-count">${nextSyncSize}</span> validators
+                            <span class="sync-time-remaining">
+                                Starts in ${epochsRemaining} epochs
+                            </span>
                         </div>
                     </div>
         `;
@@ -1019,35 +1020,105 @@ class ValidatorDutiesTracker {
         );
         
         if (trackedInCurrent.length > 0 || trackedInNext.length > 0) {
-            html += `
-                <div class="tracked-sync-members">
-                    <h4>Your Validators in Sync Committee</h4>
-            `;
+            html += `<div class="sync-summary-item tracked">`;
+            html += `<div class="sync-summary-header">Your Validators</div>`;
+            html += `<div class="sync-summary-content">`;
             
             if (trackedInCurrent.length > 0) {
-                html += '<div class="sync-validators">';
-                trackedInCurrent.forEach(v => {
-                    const color = this.getValidatorColor(v);
-                    const label = this.getValidatorLabel(v);
-                    html += `<span class="validator-badge" style="background-color: ${color}">${label}</span>`;
-                });
-                html += '</div>';
+                html += `<span>Current: ${trackedInCurrent.length}</span>`;
             }
-            
             if (trackedInNext.length > 0) {
-                html += '<div class="sync-validators" style="margin-top: 10px;"><strong>Next Period:</strong> ';
-                trackedInNext.forEach(v => {
-                    const color = this.getValidatorColor(v);
-                    const label = this.getValidatorLabel(v);
-                    html += `<span class="validator-badge" style="background-color: ${color}">${label}</span>`;
-                });
-                html += '</div>';
+                html += `<span>Next: ${trackedInNext.length}</span>`;
             }
             
-            html += '</div>';
+            html += `</div></div>`;
         }
         
         html += `
+                </div>
+                
+                <div class="overview-section">
+                    <h3>Upcoming Block Proposers</h3>
+                    <div class="epoch-info">
+                        Current Slot: ${currentSlot} | Current Epoch: ${currentEpoch}
+                    </div>
+                    <div class="proposers-grid">
+        `;
+        
+        if (displayProposers.length === 0) {
+            html += '<p style="text-align: center; color: var(--text-secondary);">No proposer data available</p>';
+        } else {
+            // Get all proposers including past ones for color assignment
+            const allProposers = this.networkOverview.allProposers;
+            const uniqueValidators = new Map();
+            
+            // Assign colors to all unique validators
+            allProposers.forEach(duty => {
+                const validatorKey = duty.validator_index || duty.pubkey;
+                if (!uniqueValidators.has(validatorKey)) {
+                    // Check if it's a tracked validator first
+                    const isTracked = this.validators.includes(duty.pubkey) || 
+                                    this.validators.includes(duty.validator_index?.toString());
+                    if (isTracked) {
+                        const validator = this.getValidatorForDuty(duty);
+                        uniqueValidators.set(validatorKey, this.getValidatorColor(validator));
+                    } else {
+                        // Assign a color from an extended palette for network validators
+                        const networkColors = [
+                            '#94a3b8', '#64748b', '#475569', '#334155', '#1e293b',
+                            '#dc2626', '#ea580c', '#d97706', '#ca8a04', '#a16207',
+                            '#16a34a', '#15803d', '#166534', '#14532d', '#052e16',
+                            '#2563eb', '#1d4ed8', '#1e40af', '#6366f1', '#4f46e5'
+                        ];
+                        const colorIndex = uniqueValidators.size % networkColors.length;
+                        uniqueValidators.set(validatorKey, networkColors[colorIndex]);
+                    }
+                }
+            });
+            
+            displayProposers.forEach(duty => {
+                const timeUntil = this.getTimeUntilSlot(duty.slot);
+                const blocksFromNow = duty.slot - currentSlot;
+                const isPast = blocksFromNow < 0;
+                const isTracked = this.validators.includes(duty.pubkey) || 
+                                this.validators.includes(duty.validator_index?.toString());
+                const validatorKey = duty.validator_index || duty.pubkey;
+                const color = uniqueValidators.get(validatorKey);
+                const validatorIndex = duty.validator_index;
+                
+                // Format time display
+                let timeDisplay;
+                if (isPast) {
+                    timeDisplay = `Passed ${this.formatTimeAgo(-timeUntil)} ago`;
+                } else {
+                    timeDisplay = this.formatTimeUntil(timeUntil);
+                }
+                
+                const blocksDisplay = isPast 
+                    ? `${Math.abs(blocksFromNow)} blocks ago`
+                    : `in ${blocksFromNow} block${blocksFromNow !== 1 ? 's' : ''}`;
+                
+                // Create clickable validator badge
+                const validatorBadge = validatorIndex 
+                    ? `<a href="https://beaconcha.in/validator/${validatorIndex}" target="_blank" class="validator-badge" style="background-color: ${color}" title="View on beaconcha.in">#${validatorIndex}</a>`
+                    : `<span class="validator-badge" style="background-color: ${color}" title="${duty.pubkey}">${this.truncateAddress(duty.pubkey)}</span>`;
+                
+                html += `
+                    <div class="proposer-card ${isTracked ? 'tracked' : ''} ${isPast ? 'past' : ''}">
+                        <div class="proposer-header">
+                            <div class="proposer-slot-info">
+                                <span class="proposer-slot" title="Epoch ${Math.floor(duty.slot / 32)}">Slot ${duty.slot}</span>
+                                <span class="time-to-block" data-slot="${duty.slot}">${timeDisplay}, ${blocksDisplay}</span>
+                            </div>
+                            ${validatorBadge}
+                        </div>
+                    </div>
+                `;
+            });
+        }
+        
+        html += `
+                    </div>
                 </div>
             </div>
         `;
