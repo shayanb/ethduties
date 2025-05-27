@@ -700,8 +700,9 @@ class ValidatorDutiesTracker {
                     `Slot: [${slot}](https://beaconcha.in/slot/${slot})\n\n` +
                     `📊 Block Details:\n` +
                     `🔥 Burned Fees: ${details.burnedFees.toFixed(4)} ETH\n` +
-                    `💰 Fee Recipient: ${details.feeRecipient ? `${details.feeRecipient.slice(0, 10)}...${details.feeRecipient.slice(-8)}` : 'Unknown'}\n\n` +
-                    `🎊 Congratulations! 🎊`;
+                    `💰 Fee Recipient: ${details.feeRecipient ? `${details.feeRecipient.slice(0, 10)}...${details.feeRecipient.slice(-8)}` : 'Unknown'}\n` +
+                    `${details.graffiti ? `✍️ Graffiti: ${details.graffiti}\n` : ''}` +
+                    `\n🎊 Congratulations! 🎊`;
                 
                 console.log('Sending Telegram block details notification:', message);
                 
@@ -1673,34 +1674,36 @@ class ValidatorDutiesTracker {
             const validator = this.getValidatorForSlot(slot);
             const color = this.getValidatorColor(validator);
             const label = this.getValidatorLabel(validator);
-            const timeAgo = this.formatTimeAgo(Date.now() - new Date(details.timestamp).getTime());
             
             // Use increasing opacity for older blocks
             const opacity = Math.max(0.5, 1 - (index * 0.15));
             
-            // Check if this is a recently proposed block (within last 2 minutes)
-            const isRecentlyProposed = (Date.now() - new Date(details.timestamp).getTime()) < 120000;
-            const proposedTag = isRecentlyProposed ? ' <span style="color: var(--success-color); font-weight: bold;">Proposed!</span>' : '';
+            // Format the block confirmation time
+            const blockDate = new Date(details.timestamp);
+            const timeStr = blockDate.toLocaleTimeString(undefined, { hour: '2-digit', minute: '2-digit' });
             
             return `
-                <div class="duty-item proposer past previous-block" style="opacity: ${opacity}">
+                <div class="duty-item past previous-block" style="opacity: ${opacity}">
                     <a href="https://beaconcha.in/validator/${validator}" target="_blank" class="validator-tag" style="background-color: ${color}" title="View validator ${validator}">${label}</a>
                     <div class="duty-content">
                         <div class="duty-header">
                             <span class="duty-type">
                                 <a href="${blockLink}" target="_blank" style="color: inherit; text-decoration: none;">
-                                    Block ${details.blockNumber || slot} ✓${proposedTag}
+                                    Block ${details.blockNumber || slot}
                                 </a>
                             </span>
                             <span class="duty-time">
-                                ${timeAgo}
+                                ${timeStr} ✓
                                 <button onclick="app.clearSingleBlock('${slot}')" class="remove-block-btn" title="Remove this block">×</button>
                             </span>
                         </div>
                         <div class="duty-details">
-                            <div>🔥 Burned: ${(details.burnedFees || 0).toFixed(4)} ETH</div>
-                            <div>💰 Fee Recipient: ${feeRecipientDisplay}</div>
-                            ${details.graffiti ? `<div>✍️ Graffiti: ${details.graffiti}</div>` : ''}
+                            <span class="slot-number">Slot ${slot}</span>
+                            <div style="margin-top: 4px;">
+                                <div>🔥 Burned: ${(details.burnedFees || 0).toFixed(4)} ETH</div>
+                                <div>💰 Fee Recipient: ${feeRecipientDisplay}</div>
+                                ${details.graffiti ? `<div>✍️ Graffiti: ${details.graffiti}</div>` : ''}
+                            </div>
                         </div>
                     </div>
                 </div>
@@ -1710,8 +1713,8 @@ class ValidatorDutiesTracker {
         if (blocksHtml) {
             return `
                 <div class="previous-blocks-wrapper">
-                    <div class="section-header" style="margin-bottom: 15px;">
-                        <h3 style="margin: 0; color: var(--text-primary); font-size: 1.1rem;">Previous Blocks</h3>
+                    <div class="section-header">
+                        <h3>Previous Blocks</h3>
                         <button onclick="app.clearBlockDetails()" class="clear-btn" title="Clear all block history">Clear All</button>
                     </div>
                     ${blocksHtml}
