@@ -149,7 +149,7 @@ app.post('/api/telegram/subscribe', (req, res) => {
         if (v.startsWith('0x')) {
             return `${v.slice(0, 10)}...${v.slice(-8)}`;
         }
-        return `[#${v}](https://beaconcha.in/validator/${v})`;
+        return `[${v}](https://beaconcha.in/validator/${v})`;
     }).join('\n• ');
     
     telegramBot.sendMessage(chatId, 
@@ -172,7 +172,7 @@ app.post('/api/telegram/subscribe', (req, res) => {
 
 // Update Telegram subscription (silent update when validators change)
 app.post('/api/telegram/update', async (req, res) => {
-    const { chatId, validators } = req.body;
+    const { chatId, validators, isNewValidator, newValidatorOnly } = req.body;
     
     if (!telegramBot) {
         return res.status(400).json({ error: 'Telegram bot not configured' });
@@ -180,6 +180,50 @@ app.post('/api/telegram/update', async (req, res) => {
     
     const oldValidators = telegramSubscriptions.get(chatId) || [];
     
+    // If this is a new validator only notification, handle it specially
+    if (isNewValidator && newValidatorOnly) {
+        // Update the subscription first
+        telegramSubscriptions.set(chatId, validators);
+        
+        // Only send notification for the new validator
+        let validatorDisplay;
+        if (newValidatorOnly.startsWith('0x')) {
+            // Try to fetch validator index for pubkey
+            try {
+                const beaconUrl = req.body.beaconUrl || 'http://localhost:5052';
+                const response = await fetch(`${beaconUrl}/eth/v1/beacon/states/head/validators/${newValidatorOnly}`);
+                if (response.ok) {
+                    const data = await response.json();
+                    if (data.data && data.data.index) {
+                        validatorDisplay = `[${data.data.index}](https://beaconcha.in/validator/${data.data.index}) (${newValidatorOnly.slice(0, 10)}...${newValidatorOnly.slice(-4)})`;
+                    }
+                }
+            } catch (error) {
+                console.error('Error fetching validator info:', error);
+            }
+            if (!validatorDisplay) {
+                validatorDisplay = `${newValidatorOnly.slice(0, 10)}...${newValidatorOnly.slice(-4)}`;
+            }
+        } else {
+            validatorDisplay = `[${newValidatorOnly}](https://beaconcha.in/validator/${newValidatorOnly})`;
+        }
+        
+        const message = `📝 Subscription Updated\n\n➕ Added:\n• ${validatorDisplay}\n\nTotal validators tracked: ${validators.length}`;
+        
+        try {
+            await telegramBot.sendMessage(chatId, message, { 
+                parse_mode: 'Markdown',
+                disable_web_page_preview: true 
+            });
+            res.json({ success: true });
+        } catch (error) {
+            console.error('Telegram update error:', error);
+            res.status(500).json({ error: error.message });
+        }
+        return;
+    }
+    
+    // Normal update flow
     // Determine what changed BEFORE updating the subscription
     const added = validators.filter(v => !oldValidators.includes(v));
     const removed = oldValidators.filter(v => !validators.includes(v));
@@ -203,7 +247,7 @@ app.post('/api/telegram/update', async (req, res) => {
                     if (response.ok) {
                         const data = await response.json();
                         if (data.data && data.data.index) {
-                            return `[#${data.data.index}](https://beaconcha.in/validator/${data.data.index}) (${v.slice(0, 10)}...${v.slice(-4)})`;
+                            return `[${data.data.index}](https://beaconcha.in/validator/${data.data.index}) (${v.slice(0, 10)}...${v.slice(-4)})`;
                         }
                     }
                 } catch (error) {
@@ -211,7 +255,7 @@ app.post('/api/telegram/update', async (req, res) => {
                 }
                 return `${v.slice(0, 10)}...${v.slice(-4)}`;
             }
-            return `[#${v}](https://beaconcha.in/validator/${v})`;
+            return `[${v}](https://beaconcha.in/validator/${v})`;
         }));
         message += `➕ Added:\n• ${addedList.join('\n• ')}\n\n`;
     }
@@ -221,7 +265,7 @@ app.post('/api/telegram/update', async (req, res) => {
             if (v.startsWith('0x')) {
                 return `${v.slice(0, 10)}...${v.slice(-8)}`;
             }
-            return `#${v}`;
+            return `${v}`;
         }).join('\n• ');
         message += `➖ Removed:\n• ${removedList}\n\n`;
     }

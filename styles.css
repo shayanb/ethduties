@@ -275,6 +275,35 @@ input[type="checkbox"] {
     font-family: monospace;
 }
 
+.pubkey-clickable {
+    cursor: pointer;
+    transition: all 0.2s ease;
+    padding: 2px 4px;
+    border-radius: 3px;
+    display: inline-block;
+}
+
+.pubkey-clickable:hover {
+    background-color: rgba(59, 130, 246, 0.1);
+    opacity: 1;
+    text-decoration: underline;
+}
+
+.pubkey-clickable:active {
+    background-color: rgba(59, 130, 246, 0.2);
+}
+
+.validator-label-edit {
+    background: white;
+    color: var(--text-primary);
+    border: 1px solid var(--border-color);
+    padding: 2px 6px;
+    border-radius: 4px;
+    font-size: 1rem;
+    width: 80px;
+    font-weight: 600;
+}
+
 .remove-validator-compact {
     background: rgba(255, 255, 255, 0.2);
     border: none;
@@ -905,27 +934,67 @@ select:focus {
     background: var(--danger-color);
     color: white;
     border: none;
-    border-radius: 50%;
-    width: 24px;
-    height: 24px;
+    border-radius: 4px;
+    padding: 4px 12px;
     cursor: pointer;
-    font-size: 16px;
-    font-weight: bold;
-    display: flex;
-    align-items: center;
-    justify-content: center;
+    font-size: 14px;
+    font-weight: 500;
     transition: all 0.2s;
 }
 
 .clear-btn:hover {
     background: #dc2626;
+}
+
+.remove-block-btn {
+    background: transparent;
+    color: var(--danger-color);
+    border: none;
+    border-radius: 50%;
+    width: 20px;
+    height: 20px;
+    cursor: pointer;
+    font-size: 16px;
+    font-weight: bold;
+    margin-left: 8px;
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    transition: all 0.2s;
+}
+
+.remove-block-btn:hover {
+    background: var(--danger-color);
+    color: white;
     transform: scale(1.1);
 }
 
-.previous-blocks-container {
+.previous-blocks-wrapper {
+    margin-bottom: 20px;
+}
+
+.previous-blocks-wrapper .duty-item {
+    margin-bottom: 10px;
+}
+
+.previous-blocks-wrapper .section-header {
     display: flex;
-    flex-direction: column;
-    gap: 10px;
+    justify-content: space-between;
+    align-items: center;
+}
+
+.duty-item.previous-block {
+    position: relative;
+    background-color: rgba(243, 244, 246, 0.8);
+}
+
+.duty-item.previous-block:hover .remove-block-btn {
+    opacity: 1;
+}
+
+.duty-item.previous-block .remove-block-btn {
+    opacity: 0;
+    transition: opacity 0.2s;
 }
 
 .previous-block-item {

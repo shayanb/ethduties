@@ -26,6 +26,7 @@ class ValidatorDutiesTracker {
         this.pushSubscription = null;
         this.notifiedDuties = new Set();
         this.validatorColors = {};
+        this.beaconErrorShown = false;
         this.colorPalette = [
             '#3b82f6', '#10b981', '#f59e0b', '#ef4444', '#8b5cf6',
             '#ec4899', '#14b8a6', '#f97316', '#06b6d4', '#84cc16'
@@ -281,7 +282,7 @@ class ValidatorDutiesTracker {
         statusEl.className = `notification-status ${success ? 'success' : 'error'}`;
     }
     
-    async updateTelegramSubscriptionSilent() {
+    async updateTelegramSubscriptionSilent(newValidator = null) {
         // Only update if Telegram is enabled
         const telegramEnabled = sessionStorage.getItem('telegramEnabled') === 'true';
         const telegramChatId = sessionStorage.getItem('telegramChatId');
@@ -291,15 +292,41 @@ class ValidatorDutiesTracker {
         }
         
         try {
-            await fetch(`${this.serverUrl}/api/telegram/update`, {
-                method: 'POST',
-                headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify({
-                    chatId: telegramChatId,
-                    validators: this.validators,
-                    beaconUrl: this.beaconUrl
-                })
-            });
+            // If we have a specific new validator, send it separately to avoid showing all validators
+            if (newValidator) {
+                // Get previous validators from session storage
+                const previousValidators = JSON.parse(sessionStorage.getItem('telegramValidators') || '[]');
+                
+                // Only send update if this is actually a new validator
+                if (!previousValidators.includes(newValidator)) {
+                    await fetch(`${this.serverUrl}/api/telegram/update`, {
+                        method: 'POST',
+                        headers: { 'Content-Type': 'application/json' },
+                        body: JSON.stringify({
+                            chatId: telegramChatId,
+                            validators: this.validators,
+                            beaconUrl: this.beaconUrl,
+                            isNewValidator: true,
+                            newValidatorOnly: newValidator
+                        })
+                    });
+                }
+                
+                // Update stored validators
+                sessionStorage.setItem('telegramValidators', JSON.stringify(this.validators));
+            } else {
+                // Full update
+                await fetch(`${this.serverUrl}/api/telegram/update`, {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({
+                        chatId: telegramChatId,
+                        validators: this.validators,
+                        beaconUrl: this.beaconUrl
+                    })
+                });
+                sessionStorage.setItem('telegramValidators', JSON.stringify(this.validators));
+            }
         } catch (error) {
             console.error('Silent Telegram update error:', error);
         }
@@ -604,6 +631,10 @@ class ValidatorDutiesTracker {
                 return;
             }
             
+            // Get block number from execution payload
+            const blockNumber = executionPayload ? executionPayload.block_number : null;
+            console.log('Block number:', blockNumber);
+            
             this.blockDetails[slot] = {
                 graffiti: graffiti || '',
                 txReward: txReward || 0,
@@ -612,6 +643,9 @@ class ValidatorDutiesTracker {
                 totalReward: (txReward || 0) + (mevReward || 0),
                 txCount: txCount || 0,
                 feeRecipient: executionPayload ? executionPayload.fee_recipient : '',
+                blockHash: executionPayload ? executionPayload.block_hash : '',
+                blockNumber: blockNumber,
+                validatorIndex: validator,
                 timestamp: new Date().toISOString()
             };
             
@@ -643,11 +677,11 @@ class ValidatorDutiesTracker {
         const browserEnabled = sessionStorage.getItem('browserNotifications') === 'true';
         
         // Get validator display
-        let validatorDisplay = `#${validator}`;
+        let validatorDisplay = validator;
         // Try to get pubkey from duties
         const proposerDuty = this.duties.proposer.find(d => d.validator === validator.toString());
         if (proposerDuty && proposerDuty.pubkey) {
-            validatorDisplay = `#${validator} (${proposerDuty.pubkey.slice(0, 10)})`;
+            validatorDisplay = `${validator} (${proposerDuty.pubkey.slice(0, 10)})`;
         }
         
         // Send Telegram notification
@@ -658,7 +692,7 @@ class ValidatorDutiesTracker {
         if (telegramEnabled && telegramChatId) {
             try {
                 const message = `🎉💰 BLOCK CONFIRMED! 🎉💰\n\n` +
-                    `Validator ${validatorDisplay}\n` +
+                    `Validator: [${validatorDisplay}](https://beaconcha.in/validator/${validator})\n` +
                     `Slot: [${slot}](https://beaconcha.in/slot/${slot})\n\n` +
                     `📊 Block Details:\n` +
                     `🔥 Burned Fees: ${details.burnedFees.toFixed(4)} ETH\n` +
@@ -779,22 +813,22 @@ class ValidatorDutiesTracker {
                 try {
                     // Since we store indices, validator should be an index
                     const index = validator;
-                    let validatorDisplay = `#${index}`;
+                    let validatorDisplay = index;
                     
                     // Add pubkey suffix if available
                     if (duty.pubkey) {
-                        validatorDisplay = `#${index} (${duty.pubkey.slice(0, 10)})`;
+                        validatorDisplay = `${index} (${duty.pubkey.slice(0, 10)})`;
                     }
                     
                     let message;
                     if (type === 'Proposer') {
-                        message = `🎉💰 BLOCK PROPOSAL! 🎉💰\n\nValidator ${validatorDisplay}\nIn ${minutesUntil} minute${minutesUntil === 1 ? '' : 's'}\nSlot: ${duty.slot}`;
+                        message = `🎉💰 BLOCK PROPOSAL! 🎉💰\n\nValidator: [${validatorDisplay}](https://beaconcha.in/validator/${index})\nIn ${minutesUntil} minute${minutesUntil === 1 ? '' : 's'}\nSlot: [${duty.slot}](https://beaconcha.in/slot/${duty.slot})`;
                     } else if (type === 'Attester') {
-                        message = `📝 Attestation Duty\n\nValidator ${validatorDisplay}\nIn ${minutesUntil} minute${minutesUntil === 1 ? '' : 's'}\nSlot: ${duty.slot}`;
+                        message = `📝 Attestation Duty\n\nValidator: [${validatorDisplay}](https://beaconcha.in/validator/${index})\nIn ${minutesUntil} minute${minutesUntil === 1 ? '' : 's'}\nSlot: [${duty.slot}](https://beaconcha.in/slot/${duty.slot})`;
                     } else if (type === 'Sync Committee') {
-                        message = `🔐💎 SYNC COMMITTEE 💎🔐\n\nValidator ${validatorDisplay}\n${duty.period === 'current' ? 'Currently active' : 'Starting soon'}\n~27 hours of enhanced rewards`;
+                        message = `🔐💎 SYNC COMMITTEE 💎🔐\n\nValidator: [${validatorDisplay}](https://beaconcha.in/validator/${index})\n${duty.period === 'current' ? 'Currently active' : 'Starting soon'}\n~27 hours of enhanced rewards`;
                     } else {
-                        message = `🚨 Validator ${validatorDisplay} has a ${type} duty in ${minutesUntil} minute${minutesUntil === 1 ? '' : 's'} (slot ${duty.slot})`;
+                        message = `🚨 Validator [${validatorDisplay}](https://beaconcha.in/validator/${index}) has a ${type} duty in ${minutesUntil} minute${minutesUntil === 1 ? '' : 's'} (slot [${duty.slot}](https://beaconcha.in/slot/${duty.slot}))`;
                     }
                     
                     console.log('Sending Telegram notification:', message);
@@ -825,9 +859,9 @@ class ValidatorDutiesTracker {
                     console.log('Sending browser notification for validator:', validator);
                     
                     // Format validator display similar to Telegram
-                    let validatorDisplay = `#${validator}`;
+                    let validatorDisplay = validator;
                     if (duty.pubkey) {
-                        validatorDisplay = `#${validator} (${duty.pubkey.slice(0, 10)})`;
+                        validatorDisplay = `${validator} (${duty.pubkey.slice(0, 10)})`;
                     }
                     
                     const response = await fetch(`${this.serverUrl}/api/notify`, {
@@ -968,6 +1002,60 @@ class ValidatorDutiesTracker {
         
         if (this.validators.length === 1) {
             this.fetchAllDuties();
+        } else {
+            // Check for upcoming block proposals for this validator
+            this.checkUpcomingProposalsForValidator(validator);
+        }
+    }
+    
+    async checkUpcomingProposalsForValidator(validator) {
+        try {
+            // Get current slot and epoch
+            const currentSlot = await this.getCurrentSlot();
+            const currentEpoch = Math.floor(currentSlot / 32);
+            const nextEpoch = currentEpoch + 1;
+            
+            // Fetch proposer duties for current and next epoch
+            const [currentProposerDuties, nextProposerDuties] = await Promise.all([
+                this.fetchProposerDuties(currentEpoch),
+                this.fetchProposerDuties(nextEpoch)
+            ]);
+            
+            // Combine and filter for this validator
+            const allProposerDuties = [...currentProposerDuties, ...nextProposerDuties];
+            const validatorDuties = allProposerDuties.filter(duty => {
+                const dutyValidator = this.getValidatorForDuty(duty);
+                return dutyValidator === validator;
+            });
+            
+            if (validatorDuties.length > 0) {
+                // Update duties for this validator
+                this.duties.proposer = [...this.duties.proposer, ...validatorDuties];
+                this.displayProposerDuties();
+                
+                // Check if any duties need immediate notification
+                const notifyMinutes = parseInt(document.getElementById('notifyMinutes').value);
+                const notifyProposer = document.getElementById('notifyProposer').checked;
+                
+                if (notifyProposer) {
+                    validatorDuties.forEach(duty => {
+                        const timeUntil = this.getTimeUntilSlot(duty.slot);
+                        const minutesUntil = Math.floor(timeUntil / 60000);
+                        
+                        // If duty is within notification window, notify immediately
+                        if (minutesUntil <= notifyMinutes && minutesUntil > 0) {
+                            this.sendNotification('Proposer', duty, minutesUntil);
+                            
+                            // Mark as notified to prevent duplicate notifications
+                            const dutyKey = `proposer-${duty.slot}-${validator}`;
+                            this.notifiedDuties.add(dutyKey);
+                            this.saveNotifiedDuties();
+                        }
+                    });
+                }
+            }
+        } catch (error) {
+            console.error('Error checking upcoming proposals for validator:', error);
         }
     }
     
@@ -1104,16 +1192,26 @@ class ValidatorDutiesTracker {
             const validatorItem = document.createElement('div');
             validatorItem.className = 'validator-item-compact';
             const color = this.getValidatorColor(validator);
+            const customLabel = this.getValidatorCustomLabel(validator);
+            const displayLabel = customLabel || validator;
             
             // Since we now always store indices, all validators should be indices
-            let indexDisplay = `<a href="https://beaconcha.in/validator/${validator}" target="_blank" class="validator-index-link">#${validator}</a>`;
+            let indexDisplay = `<a href="https://beaconcha.in/validator/${validator}" target="_blank" class="validator-index-link" ondblclick="app.editValidatorLabel('${validator}', event); return false;" title="Click to view on Beaconcha.in • Double-click to edit label">
+                <span class="validator-label-display">${displayLabel}</span>
+                <input type="text" class="validator-label-edit" style="display:none" value="${customLabel || ''}" 
+                       onblur="app.saveValidatorLabel('${validator}', this.value)"
+                       onkeydown="if(event.key === 'Enter') { app.saveValidatorLabel('${validator}', this.value); event.preventDefault(); }"
+                       onclick="event.preventDefault(); event.stopPropagation();">
+            </a>`;
             let pubkeyPreview = `<span class="validator-pubkey-preview">Loading...</span>`;
             
             // Fetch pubkey asynchronously and update
             this.getValidatorInfo(validator).then(info => {
                 if (info && info.pubkey) {
                     const preview = validatorItem.querySelector('.validator-pubkey-preview');
-                    if (preview) preview.textContent = info.pubkey.slice(0, 10) + '...' + info.pubkey.slice(-4);
+                    if (preview) {
+                        preview.innerHTML = `<span class="pubkey-clickable" onclick="app.editValidatorLabel('${validator}', event)" title="Click to edit label">${info.pubkey.slice(0, 10)}...${info.pubkey.slice(-4)}</span>`;
+                    }
                 }
             }).catch(() => {
                 const preview = validatorItem.querySelector('.validator-pubkey-preview');
@@ -1166,10 +1264,67 @@ class ValidatorDutiesTracker {
     }
     
     getValidatorLabel(validator) {
+        // Check if we have a custom label for this validator
+        const customLabel = this.getValidatorCustomLabel(validator);
+        if (customLabel) {
+            return customLabel;
+        }
+        
+        // Otherwise use default formatting
         if (validator.startsWith('0x')) {
             return this.truncateAddress(validator);
         }
-        return `#${validator}`;
+        return validator; // Return index without "#"
+    }
+    
+    getValidatorCustomLabel(validator) {
+        const labels = JSON.parse(sessionStorage.getItem('validatorLabels') || '{}');
+        return labels[validator] || null;
+    }
+    
+    setValidatorCustomLabel(validator, label) {
+        const labels = JSON.parse(sessionStorage.getItem('validatorLabels') || '{}');
+        if (label && label.trim()) {
+            labels[validator] = label.trim();
+        } else {
+            delete labels[validator];
+        }
+        sessionStorage.setItem('validatorLabels', JSON.stringify(labels));
+    }
+    
+    editValidatorLabel(validator, event) {
+        if (event) {
+            event.preventDefault();
+            event.stopPropagation();
+        }
+        
+        // Find the validator element
+        const validatorElements = document.querySelectorAll('.validator-index-link');
+        let targetElement = null;
+        
+        validatorElements.forEach(el => {
+            if (el.href && el.href.includes(validator)) {
+                targetElement = el;
+            }
+        });
+        
+        if (targetElement) {
+            const labelDisplay = targetElement.querySelector('.validator-label-display');
+            const labelInput = targetElement.querySelector('.validator-label-edit');
+            
+            if (labelDisplay && labelInput) {
+                labelDisplay.style.display = 'none';
+                labelInput.style.display = 'inline';
+                labelInput.focus();
+                labelInput.select();
+            }
+        }
+    }
+    
+    saveValidatorLabel(validator, newLabel) {
+        this.setValidatorCustomLabel(validator, newLabel);
+        this.renderValidators();
+        this.displayDuties();
     }
 
     async fetchAllDuties() {
@@ -1232,9 +1387,10 @@ class ValidatorDutiesTracker {
             if (!response.ok) {
                 const errorText = await response.text();
                 
-                // If beacon node is unavailable, show user-friendly error
+                // Handle beacon node connection errors
                 if (response.status === 500 && errorText.includes('ECONNREFUSED')) {
                     this.showBeaconNodeError();
+                    throw new Error('Cannot connect to beacon node');
                 }
                 
                 throw new Error(`HTTP error! status: ${response.status}`);
@@ -1492,41 +1648,82 @@ class ValidatorDutiesTracker {
         const sortedBlocks = Object.entries(this.blockDetails)
             .sort((a, b) => parseInt(b[0]) - parseInt(a[0]));
         
-        const blocksHtml = sortedBlocks.map(([slot, details]) => {
+        const blocksHtml = sortedBlocks.map(([slot, details], index) => {
             const feeRecipientDisplay = details.feeRecipient ? 
                 `${details.feeRecipient.slice(0, 10)}...${details.feeRecipient.slice(-8)}` : 
                 'Unknown';
             
+            const blockLink = details.blockHash ? 
+                `https://beaconcha.in/block/${details.blockHash}` : 
+                `https://beaconcha.in/slot/${slot}`;
+            
+            // Get the validator for this block
+            const validator = this.getValidatorForSlot(slot);
+            const color = this.getValidatorColor(validator);
+            const label = this.getValidatorLabel(validator);
+            const timeAgo = this.formatTimeAgo(Date.now() - new Date(details.timestamp).getTime());
+            
+            // Use increasing opacity for older blocks
+            const opacity = Math.max(0.5, 1 - (index * 0.15));
+            
+            // Check if this is a recently proposed block (within last 2 minutes)
+            const isRecentlyProposed = (Date.now() - new Date(details.timestamp).getTime()) < 120000;
+            const proposedTag = isRecentlyProposed ? ' <span style="color: var(--success-color); font-weight: bold;">Proposed!</span>' : '';
+            
             return `
-                <div class="previous-block-item">
-                    <div class="block-header">
-                        <a href="https://beaconcha.in/block/${slot}" target="_blank" class="block-title">
-                            Block ${slot}
-                        </a>
-                        <div class="block-actions">
-                            <span class="block-time">${new Date(details.timestamp).toLocaleTimeString()}</span>
-                            <button onclick="app.clearSingleBlock('${slot}')" class="clear-single-btn" title="Remove this block">×</button>
+                <div class="duty-item proposer past previous-block" style="opacity: ${opacity}">
+                    <a href="https://beaconcha.in/validator/${validator}" target="_blank" class="validator-tag" style="background-color: ${color}" title="View validator ${validator}">${label}</a>
+                    <div class="duty-content">
+                        <div class="duty-header">
+                            <span class="duty-type">
+                                <a href="${blockLink}" target="_blank" style="color: inherit; text-decoration: none;">
+                                    Block ${details.blockNumber || slot} ✓${proposedTag}
+                                </a>
+                            </span>
+                            <span class="duty-time">
+                                ${timeAgo}
+                                <button onclick="app.clearSingleBlock('${slot}')" class="remove-block-btn" title="Remove this block">×</button>
+                            </span>
                         </div>
-                    </div>
-                    <div class="block-info">
-                        <span class="block-stat-mini">🔥 ${(details.burnedFees || 0).toFixed(4)} ETH</span>
-                        <span class="block-stat-mini">💰 ${feeRecipientDisplay}</span>
+                        <div class="duty-details">
+                            <div>🔥 Burned: ${(details.burnedFees || 0).toFixed(4)} ETH</div>
+                            <div>💰 Fee Recipient: ${feeRecipientDisplay}</div>
+                            ${details.graffiti ? `<div>✍️ Graffiti: ${details.graffiti}</div>` : ''}
+                        </div>
                     </div>
                 </div>
             `;
         }).join('');
         
-        return `
-            <div class="previous-blocks-section">
-                <div class="section-header">
-                    <h3>Previous Blocks</h3>
-                    <button onclick="app.clearBlockDetails()" class="clear-btn" title="Clear all block history">×</button>
-                </div>
-                <div class="previous-blocks-container">
+        if (blocksHtml) {
+            return `
+                <div class="previous-blocks-wrapper">
+                    <div class="section-header" style="margin-bottom: 15px;">
+                        <h3 style="margin: 0; color: var(--text-primary); font-size: 1.1rem;">Previous Blocks</h3>
+                        <button onclick="app.clearBlockDetails()" class="clear-btn" title="Clear all block history">Clear All</button>
+                    </div>
                     ${blocksHtml}
                 </div>
-            </div>
-        `;
+            `;
+        }
+        
+        return '';
+    }
+    
+    getValidatorForSlot(slot) {
+        // Try to find the validator from proposer duties
+        const duty = this.duties.proposer.find(d => d.slot === parseInt(slot));
+        if (duty) {
+            return this.getValidatorForDuty(duty);
+        }
+        
+        // If not found, check if we stored it in block details
+        const details = this.blockDetails[slot];
+        if (details && details.validatorIndex) {
+            return details.validatorIndex;
+        }
+        
+        return this.validators[0] || ''; // Fallback to first validator
     }
     
     renderProposerDuty(duty, isPast = false) {
@@ -1541,31 +1738,32 @@ class ValidatorDutiesTracker {
             ? `<a href="https://beaconcha.in/validator/${duty.validator_index}" target="_blank" class="validator-tag" style="background-color: ${color}" title="View on beaconcha.in">${label}</a>`
             : `<div class="validator-tag" style="background-color: ${color}" title="${duty.pubkey}">${label}</div>`;
         
-        // Check if we have block details for this slot
+        // Only show block details inline for future duties
+        // Past duties with block details will be shown in the previous blocks section
         let blockDetailsHtml = '';
-        if (this.blockDetails && this.blockDetails[duty.slot]) {
+        if (!isPast && this.blockDetails && this.blockDetails[duty.slot]) {
             const details = this.blockDetails[duty.slot];
             const feeRecipientDisplay = details.feeRecipient ? 
                 `${details.feeRecipient.slice(0, 10)}...${details.feeRecipient.slice(-8)}` : 
                 'Unknown';
                 
+            const blockLink = details.blockHash ? 
+                `https://beaconcha.in/block/${details.blockHash}` : 
+                `https://beaconcha.in/slot/${duty.slot}`;
+                
             blockDetailsHtml = `
-                <div class="block-details">
-                    <div class="block-header">
-                        <a href="https://beaconcha.in/block/${duty.slot}" target="_blank" class="block-link">
-                            📊 View Block ${duty.slot}
-                        </a>
-                    </div>
-                    <div class="block-stat">
-                        <span class="block-stat-label">🔥 Burned:</span>
-                        <span class="block-stat-value">${(details.burnedFees || 0).toFixed(4)} ETH</span>
-                    </div>
-                    <div class="block-stat">
-                        <span class="block-stat-label">💰 Fee Recipient:</span>
-                        <span class="block-stat-value">${feeRecipientDisplay}</span>
-                    </div>
+                <div class="duty-details" style="margin-top: 8px;">
+                    <div><a href="${blockLink}" target="_blank" style="color: var(--primary-color); text-decoration: none;">📊 View Block ${details.blockNumber || duty.slot}</a></div>
+                    <div>🔥 Burned: ${(details.burnedFees || 0).toFixed(4)} ETH</div>
+                    <div>💰 Fee Recipient: ${feeRecipientDisplay}</div>
+                    ${details.graffiti ? `<div>✍️ Graffiti: ${details.graffiti}</div>` : ''}
                 </div>
             `;
+        }
+        
+        // Don't show past duties if they have block details (they'll be in previous blocks section)
+        if (isPast && this.blockDetails && this.blockDetails[duty.slot]) {
+            return '';
         }
         
         return `
@@ -1612,7 +1810,7 @@ class ValidatorDutiesTracker {
             
             return `
                 <div class="duty-item ${urgencyClass}">
-                    <div class="validator-tag" style="background-color: ${color}">${label}</div>
+                    <a href="https://beaconcha.in/validator/${validator}" target="_blank" class="validator-tag" style="background-color: ${color}" title="View validator ${validator}">${label}</a>
                     <div class="duty-content">
                         <div class="duty-header">
                             <span class="duty-type">Attestation</span>
@@ -1668,7 +1866,7 @@ class ValidatorDutiesTracker {
             
             return `
                 <div class="duty-item">
-                    <div class="validator-tag" style="background-color: ${color}">${label}</div>
+                    <a href="https://beaconcha.in/validator/${duty.validator}" target="_blank" class="validator-tag" style="background-color: ${color}" title="View validator ${duty.validator}">${label}</a>
                     <div class="duty-content">
                         <div class="duty-header">
                             <span class="duty-type">Sync Committee</span>
@@ -1825,7 +2023,7 @@ class ValidatorDutiesTracker {
                 
                 // Create clickable validator badge
                 const validatorBadge = validatorIndex 
-                    ? `<a href="https://beaconcha.in/validator/${validatorIndex}" target="_blank" class="validator-badge" style="background-color: ${color}" title="View on beaconcha.in">#${validatorIndex}</a>`
+                    ? `<a href="https://beaconcha.in/validator/${validatorIndex}" target="_blank" class="validator-badge" style="background-color: ${color}" title="View on beaconcha.in">${validatorIndex}</a>`
                     : `<span class="validator-badge" style="background-color: ${color}" title="${duty.pubkey}">${this.truncateAddress(duty.pubkey)}</span>`;
                 
                 html += `
@@ -1967,7 +2165,7 @@ class ValidatorDutiesTracker {
                 <a href="https://beaconcha.in/validator/${validatorIndex}" target="_blank" 
                    class="validator-badge ${isTracked ? 'tracked' : ''}" 
                    style="background-color: ${color}; display: block; text-align: center; padding: 8px;">
-                    #${validatorIndex}
+                    ${validatorIndex}
                 </a>
             `;
         });
