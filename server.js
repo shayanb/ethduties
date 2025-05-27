@@ -147,29 +147,210 @@ app.post('/api/telegram/subscribe', (req, res) => {
     
     const validatorList = validators.map(v => {
         if (v.startsWith('0x')) {
-            return `${v.slice(0, 10)}...${v.slice(-8)} (Pubkey)`;
+            return `${v.slice(0, 10)}...${v.slice(-8)}`;
         }
-        return `#${v} (Index)`;
+        return `[#${v}](https://beaconcha.in/validator/${v})`;
     }).join('\n• ');
     
     telegramBot.sendMessage(chatId, 
+        `🎉 Welcome to ETH Duties Tracker! 🎉\n\n` +
         `✅ Successfully subscribed to validator duty notifications!\n\n` +
-        `Tracking ${validators.length} validator(s):\n• ${validatorList}`
+        `📊 Tracking ${validators.length} validator(s):\n• ${validatorList}\n\n` +
+        `You'll receive notifications for:\n` +
+        `💰 Block proposals\n` +
+        `📝 Attestations\n` +
+        `💎 Sync committee duties\n\n` +
+        `✌️`,
+        { 
+            parse_mode: 'Markdown',
+            disable_web_page_preview: true 
+        }
     );
     
     res.json({ success: true });
 });
 
+// Update Telegram subscription (silent update when validators change)
+app.post('/api/telegram/update', async (req, res) => {
+    const { chatId, validators } = req.body;
+    
+    if (!telegramBot) {
+        return res.status(400).json({ error: 'Telegram bot not configured' });
+    }
+    
+    const oldValidators = telegramSubscriptions.get(chatId) || [];
+    
+    // Determine what changed BEFORE updating the subscription
+    const added = validators.filter(v => !oldValidators.includes(v));
+    const removed = oldValidators.filter(v => !validators.includes(v));
+    
+    // Now update the subscription
+    telegramSubscriptions.set(chatId, validators);
+    
+    if (added.length === 0 && removed.length === 0) {
+        return res.json({ success: true, message: 'No changes' });
+    }
+    
+    let message = '📝 Subscription Updated\n\n';
+    
+    if (added.length > 0) {
+        const addedList = await Promise.all(added.map(async v => {
+            if (v.startsWith('0x')) {
+                // Try to fetch validator index for pubkey
+                try {
+                    const beaconUrl = req.body.beaconUrl || 'http://localhost:5052';
+                    const response = await fetch(`${beaconUrl}/eth/v1/beacon/states/head/validators/${v}`);
+                    if (response.ok) {
+                        const data = await response.json();
+                        if (data.data && data.data.index) {
+                            return `[#${data.data.index}](https://beaconcha.in/validator/${data.data.index}) (${v.slice(0, 10)}...${v.slice(-4)})`;
+                        }
+                    }
+                } catch (error) {
+                    console.error('Error fetching validator info:', error);
+                }
+                return `${v.slice(0, 10)}...${v.slice(-4)}`;
+            }
+            return `[#${v}](https://beaconcha.in/validator/${v})`;
+        }));
+        message += `➕ Added:\n• ${addedList.join('\n• ')}\n\n`;
+    }
+    
+    if (removed.length > 0) {
+        const removedList = removed.map(v => {
+            if (v.startsWith('0x')) {
+                return `${v.slice(0, 10)}...${v.slice(-8)}`;
+            }
+            return `#${v}`;
+        }).join('\n• ');
+        message += `➖ Removed:\n• ${removedList}\n\n`;
+    }
+    
+    message += `Total validators tracked: ${validators.length}`;
+    
+    try {
+        await telegramBot.sendMessage(chatId, message, { 
+            parse_mode: 'Markdown',
+            disable_web_page_preview: true 
+        });
+        res.json({ success: true });
+    } catch (error) {
+        console.error('Telegram update error:', error);
+        res.status(500).json({ error: error.message });
+    }
+});
+
+// Notification settings update
+app.post('/api/telegram/settings-update', async (req, res) => {
+    const { chatId, settings } = req.body;
+    
+    if (!telegramBot) {
+        return res.status(400).json({ error: 'Telegram bot not configured' });
+    }
+    
+    try {
+        let message = '⚙️ Notification Settings Updated\n\n';
+        
+        const duties = [];
+        if (settings.notifyProposer) duties.push('💰 Block proposals');
+        if (settings.notifyAttester) duties.push('📝 Attestations');
+        if (settings.notifySync) duties.push('💎 Sync committee');
+        
+        if (duties.length > 0) {
+            message += `Notifications enabled for:\n${duties.join('\n')}\n\n`;
+            message += `⏰ Alert timing: ${settings.notifyMinutes} minutes before duty`;
+        } else {
+            message += '🔕 All notifications disabled';
+        }
+        
+        await telegramBot.sendMessage(chatId, message, { 
+            parse_mode: 'Markdown',
+            disable_web_page_preview: true 
+        });
+        res.json({ success: true });
+    } catch (error) {
+        console.error('Settings update notification error:', error);
+        res.status(500).json({ error: error.message });
+    }
+});
+
+// Send Telegram notification directly
+app.post('/api/notify/telegram', async (req, res) => {
+    const { chatId, message } = req.body;
+    
+    if (!telegramBot) {
+        return res.status(400).json({ error: 'Telegram bot not configured' });
+    }
+    
+    try {
+        // Parse validator index from message and create clickable link
+        let formattedMessage = message;
+        const validatorMatch = message.match(/Validator #(\d+)/);
+        if (validatorMatch) {
+            const validatorIndex = validatorMatch[1];
+            // Use Markdown format for clickable link
+            formattedMessage = message.replace(
+                `Validator #${validatorIndex}`,
+                `Validator [#${validatorIndex}](https://beaconcha.in/validator/${validatorIndex})`
+            );
+        }
+        
+        await telegramBot.sendMessage(chatId, formattedMessage, { 
+            parse_mode: 'Markdown',
+            disable_web_page_preview: true 
+        });
+        res.json({ success: true });
+    } catch (error) {
+        console.error('Telegram notification error:', error);
+        res.status(500).json({ error: error.message });
+    }
+});
+
 // Send notification endpoint
 app.post('/api/notify', async (req, res) => {
-    const { type, validator, duty, urgency } = req.body;
+    const { type, validator, validatorDisplay, duty, urgency } = req.body;
+    
+    console.log('Received notification request:', { type, validator, validatorDisplay });
     
     // Send push notifications
+    let notificationsSent = 0;
+    console.log(`Checking ${pushSubscriptions.size} push subscriptions`);
+    
     for (const [key, data] of pushSubscriptions.entries()) {
-        if (data.validators.includes(validator)) {
+        console.log('Checking subscription validators:', data.validators, 'against validator:', validator, 'type:', typeof validator);
+        
+        // Check if this subscription includes the validator (handle both string and number)
+        const validatorStr = validator.toString();
+        const validatorNum = parseInt(validator);
+        const hasValidator = data.validators.some(v => 
+            v === validator || 
+            v === validatorStr || 
+            v === validatorNum ||
+            v.toString() === validatorStr
+        );
+        
+        if (hasValidator) {
+            console.log('Found matching subscription!');
+            
+            // Create notification with new format matching Telegram style
+            let title, body;
+            if (type === 'Proposer') {
+                title = '🎉💰 BLOCK PROPOSAL! 🎉💰';
+                body = `Validator ${validatorDisplay || validator} - ${duty.timeUntil}`;
+            } else if (type === 'Attester') {
+                title = '📝 Attestation Duty';
+                body = `Validator ${validatorDisplay || validator} - ${duty.timeUntil}`;
+            } else if (type === 'Sync Committee') {
+                title = '🔐💎 SYNC COMMITTEE 💎🔐';
+                body = `Validator ${validatorDisplay || validator} - Active now`;
+            } else {
+                title = `${type} Duty`;
+                body = `Validator ${validatorDisplay || validator} - ${duty.timeUntil}`;
+            }
+            
             const payload = JSON.stringify({
-                title: `${type} Duty Alert`,
-                body: `Validator ${validator.slice(0, 10)}... has ${type} duty in ${duty.timeUntil}`,
+                title,
+                body,
                 icon: '/icon-192.png',
                 badge: '/badge-72.png',
                 data: { duty, urgency }
@@ -177,6 +358,8 @@ app.post('/api/notify', async (req, res) => {
             
             try {
                 await webpush.sendNotification(data.subscription, payload);
+                notificationsSent++;
+                console.log('Push notification sent successfully');
             } catch (error) {
                 console.error('Push notification error:', error);
                 pushSubscriptions.delete(key);
@@ -184,24 +367,10 @@ app.post('/api/notify', async (req, res) => {
         }
     }
     
-    // Send Telegram notifications
-    if (telegramBot) {
-        for (const [chatId, validators] of telegramSubscriptions.entries()) {
-            if (validators.includes(validator)) {
-                const urgencyEmoji = urgency === 'critical' ? '🚨' : urgency === 'urgent' ? '⚠️' : '📢';
-                const message = `${urgencyEmoji} *${type} Duty Alert*\n\n` +
-                    `Validator: \`${validator.slice(0, 10)}...\`\n` +
-                    `Time until duty: ${duty.timeUntil}\n` +
-                    `Slot: ${duty.slot}`;
-                
-                try {
-                    await telegramBot.sendMessage(chatId, message, { parse_mode: 'Markdown' });
-                } catch (error) {
-                    console.error('Telegram notification error:', error);
-                }
-            }
-        }
-    }
+    console.log(`Sent ${notificationsSent} push notifications`);
+    
+    // Note: Telegram notifications are now sent directly via /api/notify/telegram
+    // to avoid duplicate notifications
     
     res.json({ success: true });
 });

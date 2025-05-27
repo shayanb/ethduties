@@ -5,6 +5,7 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>ETH Validator Duties Tracker</title>
     <link rel="stylesheet" href="styles.css">
+    <script src="https://cdn.jsdelivr.net/npm/canvas-confetti@1.6.0/dist/confetti.browser.min.js"></script>
 </head>
 <body>
     <div class="container">
@@ -160,6 +161,19 @@
         <footer>
             <p>Data cached in session storage | Inspired by <a href="https://github.com/TobiWo/eth-duties" target="_blank">eth-duties</a></p>
         </footer>
+    </div>
+
+    <!-- Sync Committee Members Modal -->
+    <div id="syncCommitteeModal" class="modal">
+        <div class="modal-content">
+            <div class="modal-header">
+                <h2 id="modalTitle">Sync Committee Members</h2>
+                <button class="modal-close" onclick="app.closeSyncCommitteeModal()">&times;</button>
+            </div>
+            <div id="modalBody" class="modal-body">
+                <!-- Members will be populated here -->
+            </div>
+        </div>
     </div>
 
     <script src="config.js"></script>

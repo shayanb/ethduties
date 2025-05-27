@@ -33,6 +33,7 @@ class ValidatorDutiesTracker {
         
         // Initialize validators after setting up colors
         this.validators = this.loadValidators();
+        this.loadNotifiedDuties();
         
         this.initializeEventListeners();
         this.renderValidators();
@@ -161,12 +162,27 @@ class ValidatorDutiesTracker {
                 throw new Error('Notification permission denied');
             }
             
+            // Register the service worker and wait for it to be ready
             const registration = await navigator.serviceWorker.register('/sw.js');
             
-            const subscription = await registration.pushManager.subscribe({
-                userVisibleOnly: true,
-                applicationServerKey: this.urlBase64ToUint8Array(this.vapidPublicKey)
-            });
+            // Wait for the service worker to be ready
+            await navigator.serviceWorker.ready;
+            
+            // Ensure we have VAPID key
+            if (!this.vapidPublicKey) {
+                throw new Error('VAPID public key not available. Please check server configuration.');
+            }
+            
+            // Check if we already have a subscription
+            let subscription = await registration.pushManager.getSubscription();
+            
+            if (!subscription) {
+                // Create a new subscription
+                subscription = await registration.pushManager.subscribe({
+                    userVisibleOnly: true,
+                    applicationServerKey: this.urlBase64ToUint8Array(this.vapidPublicKey)
+                });
+            }
             
             this.pushSubscription = subscription;
             
@@ -180,6 +196,7 @@ class ValidatorDutiesTracker {
             });
             
             this.showNotificationStatus('browser', 'Browser notifications enabled', true);
+            sessionStorage.setItem('browserNotifications', 'true');
         } catch (error) {
             console.error('Browser notification error:', error);
             this.showNotificationStatus('browser', error.message, false);
@@ -262,6 +279,30 @@ class ValidatorDutiesTracker {
         statusEl.textContent = message;
         statusEl.className = `notification-status ${success ? 'success' : 'error'}`;
     }
+    
+    async updateTelegramSubscriptionSilent() {
+        // Only update if Telegram is enabled
+        const telegramEnabled = sessionStorage.getItem('telegramEnabled') === 'true';
+        const telegramChatId = sessionStorage.getItem('telegramChatId');
+        
+        if (!telegramEnabled || !telegramChatId) {
+            return;
+        }
+        
+        try {
+            await fetch(`${this.serverUrl}/api/telegram/update`, {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({
+                    chatId: telegramChatId,
+                    validators: this.validators,
+                    beaconUrl: this.beaconUrl
+                })
+            });
+        } catch (error) {
+            console.error('Silent Telegram update error:', error);
+        }
+    }
 
     urlBase64ToUint8Array(base64String) {
         const padding = '='.repeat((4 - base64String.length % 4) % 4);
@@ -272,6 +313,36 @@ class ValidatorDutiesTracker {
             outputArray[i] = rawData.charCodeAt(i);
         }
         return outputArray;
+    }
+    
+    async sendNotificationSettingsUpdate() {
+        // Only send if Telegram is enabled
+        const telegramEnabled = sessionStorage.getItem('telegramEnabled') === 'true';
+        const telegramChatId = sessionStorage.getItem('telegramChatId');
+        
+        if (!telegramEnabled || !telegramChatId) {
+            return;
+        }
+        
+        const settings = {
+            notifyProposer: document.getElementById('notifyProposer').checked,
+            notifyAttester: document.getElementById('notifyAttester').checked,
+            notifySync: document.getElementById('notifySync').checked,
+            notifyMinutes: document.getElementById('notifyMinutes').value
+        };
+        
+        try {
+            await fetch(`${this.serverUrl}/api/telegram/settings-update`, {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({
+                    chatId: telegramChatId,
+                    settings
+                })
+            });
+        } catch (error) {
+            console.error('Settings update notification error:', error);
+        }
     }
 
     startNotificationCheck() {
@@ -288,23 +359,48 @@ class ValidatorDutiesTracker {
     }
     
     updateCountdowns() {
+        const currentSlot = this.getCurrentSlotSync();
+        
         // Update all duty time displays
         document.querySelectorAll('.duty-time').forEach(element => {
             const slot = parseInt(element.dataset.slot);
+            const dutyType = element.dataset.dutyType;
             if (slot) {
                 const timeUntil = this.getTimeUntilSlot(slot);
-                element.textContent = this.formatTimeUntil(timeUntil);
                 
-                // Update urgency class
+                // Check if block was just proposed by one of our validators
+                if (dutyType === 'proposer' && slot === currentSlot && !element.dataset.celebrated) {
+                    element.dataset.celebrated = 'true';
+                    this.celebrateBlockProposal(element);
+                }
+                
+                if (slot < currentSlot) {
+                    element.textContent = 'Completed ✓';
+                } else {
+                    element.textContent = this.formatTimeUntil(timeUntil);
+                }
+                
+                // Update duty item classes
                 const dutyItem = element.closest('.duty-item');
                 if (dutyItem) {
-                    dutyItem.className = `duty-item ${element.dataset.dutyType || ''} ${this.getUrgencyClass(timeUntil)}`;
+                    const classes = ['duty-item'];
+                    if (dutyType) classes.push(dutyType);
+                    
+                    if (slot < currentSlot) {
+                        classes.push('proposed');
+                    } else if (slot === currentSlot && dutyType === 'proposer') {
+                        classes.push('proposing');
+                    } else {
+                        const urgencyClass = this.getUrgencyClass(timeUntil);
+                        if (urgencyClass) classes.push(urgencyClass);
+                    }
+                    
+                    dutyItem.className = classes.join(' ');
                 }
             }
         });
         
         // Update network overview countdowns
-        const currentSlot = this.getCurrentSlotSync();
         document.querySelectorAll('.time-to-block').forEach(element => {
             const slot = parseInt(element.dataset.slot);
             if (slot) {
@@ -312,30 +408,55 @@ class ValidatorDutiesTracker {
                 const blocksFromNow = slot - currentSlot;
                 const isPast = blocksFromNow < 0;
                 
-                let timeDisplay;
-                if (isPast) {
-                    timeDisplay = `Passed ${this.formatTimeAgo(-timeUntil)} ago`;
-                } else {
-                    timeDisplay = this.formatTimeUntil(timeUntil);
+                // Check if block was just proposed by a tracked validator
+                const card = element.closest('.proposer-card');
+                if (slot === currentSlot && card && card.classList.contains('tracked') && !card.dataset.celebrated) {
+                    card.dataset.celebrated = 'true';
+                    this.celebrateBlockProposal(card);
                 }
                 
-                const blocksDisplay = isPast 
-                    ? `${Math.abs(blocksFromNow)} blocks ago`
-                    : `in ${blocksFromNow} block${blocksFromNow !== 1 ? 's' : ''}`;
+                let timeDisplay;
+                let blocksDisplay = Math.abs(blocksFromNow) + ' block' + (Math.abs(blocksFromNow) !== 1 ? 's' : '');
                 
-                element.textContent = `${timeDisplay}, ${blocksDisplay}`;
+                if (blocksFromNow === 0) {
+                    timeDisplay = `🎉 Proposing now! | Current block`;
+                } else if (isPast) {
+                    timeDisplay = `Passed ${this.formatTimeAgo(-timeUntil)} ago | ${blocksDisplay}`;
+                } else {
+                    timeDisplay = `in ${this.formatTimeUntil(timeUntil)} | ${blocksDisplay}`;
+                }
                 
-                // Update past class on proposer card
-                const card = element.closest('.proposer-card');
+                element.textContent = timeDisplay;
+                
+                // Update card classes
                 if (card) {
-                    if (isPast && !card.classList.contains('past')) {
+                    card.classList.remove('past', 'proposing');
+                    if (blocksFromNow === 0) {
+                        card.classList.add('proposing');
+                    } else if (isPast) {
                         card.classList.add('past');
-                    } else if (!isPast && card.classList.contains('past')) {
-                        card.classList.remove('past');
                     }
                 }
             }
         });
+    }
+    
+    celebrateBlockProposal(element) {
+        // Trigger confetti
+        if (window.confetti) {
+            confetti({
+                particleCount: 100,
+                spread: 70,
+                origin: { y: 0.6 },
+                colors: ['#10b981', '#3b82f6', '#fbbf24']
+            });
+        }
+        
+        // Add celebration animation
+        element.classList.add('celebrating');
+        setTimeout(() => {
+            element.classList.remove('celebrating');
+        }, 3000);
     }
 
     checkForUpcomingDuties() {
@@ -358,48 +479,125 @@ class ValidatorDutiesTracker {
         
         if (notifySync) {
             this.duties.sync.forEach(duty => {
-                // For sync committee, we need to add a slot property for notification
-                if (duty.period === 'current') {
-                    // Use current slot as a reference
-                    duty.slot = this.getCurrentSlotSync();
-                    this.checkAndNotifyDuty('Sync Committee', duty, notifyMinutes);
+                // Check if we should notify about sync committee
+                const dutyKey = `sync-${duty.period}-${duty.validator}`;
+                if (!this.notifiedDuties.has(dutyKey)) {
+                    // Notify once when validator enters sync committee
+                    if (duty.period === 'current' || duty.period === 'next') {
+                        duty.slot = this.getCurrentSlotSync(); // Add slot for notification system
+                        this.checkAndNotifyDuty('Sync Committee', duty, 60); // Always notify within 60 minutes for sync
+                        this.notifiedDuties.add(dutyKey);
+                        this.saveNotifiedDuties();
+                    }
                 }
             });
         }
     }
 
-    checkAndNotifyDuty(type, duty, notifyMinutes) {
+    async checkAndNotifyDuty(type, duty, notifyMinutes) {
         // Get the validator we're tracking for this duty
         const validator = this.getValidatorForDuty(duty);
+        if (!validator) {
+            console.warn('Could not find validator for duty:', duty);
+            return;
+        }
+        
         const dutyKey = `${type}-${duty.slot}-${validator}`;
         
         if (this.notifiedDuties.has(dutyKey)) return;
         
         const timeUntil = this.getTimeUntilSlot(duty.slot);
-        const minutesUntil = timeUntil / 1000 / 60;
+        const minutesUntil = Math.floor(timeUntil / 1000 / 60);
         
         if (minutesUntil > 0 && minutesUntil <= notifyMinutes) {
             this.notifiedDuties.add(dutyKey);
+            this.saveNotifiedDuties();
             
             const urgency = minutesUntil < 1 ? 'critical' : minutesUntil < 2 ? 'urgent' : 'normal';
             
-            console.log(`Sending notification for ${type} duty: validator ${validator}, slot ${duty.slot}`);
+            console.log(`Sending notification for ${type} duty: validator ${validator}, slot ${duty.slot}, minutes until: ${minutesUntil}`);
             
-            fetch(`${this.serverUrl}/api/notify`, {
-                method: 'POST',
-                headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify({
-                    type,
-                    validator: validator,
-                    duty: {
-                        slot: duty.slot,
-                        timeUntil: this.formatTimeUntil(timeUntil)
-                    },
-                    urgency
-                })
-            }).catch(error => {
-                console.error('Error sending notification:', error);
-            });
+            // Send Telegram notification if enabled
+            const telegramEnabled = sessionStorage.getItem('telegramEnabled') === 'true';
+            const telegramChatId = sessionStorage.getItem('telegramChatId');
+            
+            if (telegramEnabled && telegramChatId) {
+                try {
+                    // Since we store indices, validator should be an index
+                    const index = validator;
+                    let validatorDisplay = `#${index}`;
+                    
+                    // Add pubkey suffix if available
+                    if (duty.pubkey) {
+                        validatorDisplay = `#${index} (${duty.pubkey.slice(0, 10)})`;
+                    }
+                    
+                    let message;
+                    if (type === 'Proposer') {
+                        message = `🎉💰 BLOCK PROPOSAL! 🎉💰\n\nValidator ${validatorDisplay}\nIn ${minutesUntil} minute${minutesUntil === 1 ? '' : 's'}\nSlot: ${duty.slot}`;
+                    } else if (type === 'Attester') {
+                        message = `📝 Attestation Duty\n\nValidator ${validatorDisplay}\nIn ${minutesUntil} minute${minutesUntil === 1 ? '' : 's'}\nSlot: ${duty.slot}`;
+                    } else if (type === 'Sync Committee') {
+                        message = `🔐💎 SYNC COMMITTEE 💎🔐\n\nValidator ${validatorDisplay}\n${duty.period === 'current' ? 'Currently active' : 'Starting soon'}\n~27 hours of enhanced rewards`;
+                    } else {
+                        message = `🚨 Validator ${validatorDisplay} has a ${type} duty in ${minutesUntil} minute${minutesUntil === 1 ? '' : 's'} (slot ${duty.slot})`;
+                    }
+                    
+                    console.log('Sending Telegram notification:', message);
+                    
+                    const response = await fetch(`${this.serverUrl}/api/notify/telegram`, {
+                        method: 'POST',
+                        headers: { 'Content-Type': 'application/json' },
+                        body: JSON.stringify({ 
+                            chatId: telegramChatId, 
+                            message 
+                        })
+                    });
+                    
+                    if (!response.ok) {
+                        const error = await response.text();
+                        throw new Error(`Failed to send Telegram notification: ${error}`);
+                    }
+                    console.log('Telegram notification sent successfully');
+                } catch (error) {
+                    console.error('Telegram notification error:', error);
+                }
+            }
+            
+            // Send browser notification if enabled
+            const browserEnabled = sessionStorage.getItem('browserNotifications') === 'true';
+            if (browserEnabled && this.pushSubscription) {
+                try {
+                    console.log('Sending browser notification for validator:', validator);
+                    
+                    // Format validator display similar to Telegram
+                    let validatorDisplay = `#${validator}`;
+                    if (duty.pubkey) {
+                        validatorDisplay = `#${validator} (${duty.pubkey.slice(0, 10)})`;
+                    }
+                    
+                    const response = await fetch(`${this.serverUrl}/api/notify`, {
+                        method: 'POST',
+                        headers: { 'Content-Type': 'application/json' },
+                        body: JSON.stringify({
+                            type,
+                            validator: validator, // Send the raw index, not the label
+                            validatorDisplay, // Send the formatted display
+                            duty: {
+                                slot: duty.slot,
+                                timeUntil: this.formatTimeUntil(timeUntil)
+                            },
+                            urgency
+                        })
+                    });
+                    
+                    if (!response.ok) {
+                        console.error('Browser notification response not ok:', await response.text());
+                    }
+                } catch (error) {
+                    console.error('Browser notification error:', error);
+                }
+            }
         }
     }
 
@@ -418,14 +616,51 @@ class ValidatorDutiesTracker {
     saveValidators() {
         sessionStorage.setItem('validators', JSON.stringify(this.validators));
     }
+    
+    loadNotifiedDuties() {
+        const stored = sessionStorage.getItem('notifiedDuties');
+        if (stored) {
+            try {
+                const duties = JSON.parse(stored);
+                this.notifiedDuties = new Set(duties);
+            } catch (e) {
+                console.error('Failed to load notified duties:', e);
+            }
+        }
+    }
+    
+    saveNotifiedDuties() {
+        sessionStorage.setItem('notifiedDuties', JSON.stringify([...this.notifiedDuties]));
+    }
 
     async addValidator() {
         const input = document.getElementById('validatorInput');
-        const validator = input.value.trim();
+        let validator = input.value.trim();
         
         if (!validator) {
             this.showError('Please enter a validator public key or index');
             return;
+        }
+        
+        // If it's a pubkey, try to convert it to index
+        if (validator.startsWith('0x')) {
+            this.showLoading(true);
+            try {
+                const validatorInfo = await this.getValidatorInfo(validator);
+                if (validatorInfo && validatorInfo.index) {
+                    console.log(`Converting pubkey ${validator} to index ${validatorInfo.index}`);
+                    validator = validatorInfo.index.toString();
+                } else {
+                    this.showError('Could not find validator index for this pubkey');
+                    this.showLoading(false);
+                    return;
+                }
+            } catch (error) {
+                this.showError('Failed to fetch validator info. Please check the pubkey.');
+                this.showLoading(false);
+                return;
+            }
+            this.showLoading(false);
         }
         
         if (this.validators.includes(validator)) {
@@ -445,6 +680,9 @@ class ValidatorDutiesTracker {
         this.saveValidators();
         this.renderValidators();
         input.value = '';
+        
+        // Update Telegram subscription if enabled
+        this.updateTelegramSubscriptionSilent();
         
         if (this.validators.length === 1) {
             this.fetchAllDuties();
@@ -511,11 +749,21 @@ class ValidatorDutiesTracker {
         return this.validatorColors[validator] || '#6b7280';
     }
 
+    confirmRemoveValidator(validator) {
+        const label = this.getValidatorLabel(validator);
+        if (confirm(`Are you sure you want to remove validator ${label}?`)) {
+            this.removeValidator(validator);
+        }
+    }
+    
     removeValidator(validator) {
         this.validators = this.validators.filter(v => v !== validator);
         delete this.validatorColors[validator];
         this.saveValidators();
         this.renderValidators();
+        
+        // Update Telegram subscription if enabled
+        this.updateTelegramSubscriptionSilent();
     }
 
     renderValidators() {
@@ -523,20 +771,47 @@ class ValidatorDutiesTracker {
         list.innerHTML = '';
         
         if (this.validators.length === 0) {
-            list.innerHTML = '<li style="text-align: center; color: var(--text-secondary);">No validators added yet</li>';
+            list.innerHTML = '<div style="text-align: center; color: var(--text-secondary); padding: 20px;">No validators added yet</div>';
             return;
         }
         
+        // Create a grid container
+        const gridContainer = document.createElement('div');
+        gridContainer.className = 'validators-grid';
+        
         this.validators.forEach(validator => {
-            const li = document.createElement('li');
+            const validatorItem = document.createElement('div');
+            validatorItem.className = 'validator-item-compact';
             const color = this.getValidatorColor(validator);
-            li.innerHTML = `
-                <div class="validator-color-badge" style="background-color: ${color}"></div>
-                <span class="validator-address">${this.truncateAddress(validator)}</span>
-                <button class="remove-validator" onclick="app.removeValidator('${validator}')">Remove</button>
+            
+            // Since we now always store indices, all validators should be indices
+            let indexDisplay = `<a href="https://beaconcha.in/validator/${validator}" target="_blank" class="validator-index-link">#${validator}</a>`;
+            let pubkeyPreview = `<span class="validator-pubkey-preview">Loading...</span>`;
+            
+            // Fetch pubkey asynchronously and update
+            this.getValidatorInfo(validator).then(info => {
+                if (info && info.pubkey) {
+                    const preview = validatorItem.querySelector('.validator-pubkey-preview');
+                    if (preview) preview.textContent = info.pubkey.slice(0, 10) + '...' + info.pubkey.slice(-4);
+                }
+            }).catch(() => {
+                const preview = validatorItem.querySelector('.validator-pubkey-preview');
+                if (preview) preview.textContent = 'Error loading';
+            });
+            
+            validatorItem.innerHTML = `
+                <div class="validator-badge-compact" style="background-color: ${color}">
+                    <div class="validator-info">
+                        ${indexDisplay}
+                        ${pubkeyPreview}
+                    </div>
+                    <button class="remove-validator-compact" onclick="app.confirmRemoveValidator('${validator}')" title="Remove validator">×</button>
+                </div>
             `;
-            list.appendChild(li);
+            gridContainer.appendChild(validatorItem);
         });
+        
+        list.appendChild(gridContainer);
     }
 
     truncateAddress(address) {
@@ -557,8 +832,16 @@ class ValidatorDutiesTracker {
             return indexStr;
         }
         
-        // Fallback - return first match
-        return duty.pubkey || indexStr;
+        // Try to find by checking both formats
+        const found = this.validators.find(v => 
+            v === duty.pubkey || v === duty.validator_index?.toString()
+        );
+        
+        if (!found) {
+            console.warn('Could not match duty to tracked validator:', duty);
+        }
+        
+        return found;
     }
     
     getValidatorLabel(validator) {
@@ -587,13 +870,16 @@ class ValidatorDutiesTracker {
                 Current Epoch: ${currentEpoch} | Current Slot: ${currentSlot} | Next Epoch: ${nextEpoch}
             `;
             
-            const [proposerDuties, attesterDuties, syncDuties] = await Promise.all([
+            // Fetch for current and next epoch to catch upcoming duties
+            const [currentProposerDuties, nextProposerDuties, attesterDuties, syncDuties] = await Promise.all([
                 this.fetchProposerDuties(currentEpoch),
+                this.fetchProposerDuties(nextEpoch),
                 this.fetchAttesterDuties(nextEpoch),
                 this.fetchSyncCommitteeDuties(currentEpoch)
             ]);
             
-            this.duties.proposer = proposerDuties;
+            // Combine current and next epoch proposer duties
+            this.duties.proposer = [...currentProposerDuties, ...nextProposerDuties];
             this.duties.attester = attesterDuties;
             this.duties.sync = syncDuties;
             
@@ -673,12 +959,10 @@ class ValidatorDutiesTracker {
 
     async fetchAttesterDuties(epoch) {
         try {
-            const validatorIndices = this.validators.filter(v => !v.startsWith('0x'));
-            const validatorPubkeys = this.validators.filter(v => v.startsWith('0x'));
+            // All validators should now be indices since we convert pubkeys on add
+            const requestBody = this.validators;
             
-            const requestBody = [...validatorIndices, ...validatorPubkeys];
-            
-            console.log(`Fetching attester duties for ${requestBody.length} validators in epoch ${epoch}`);
+            console.log(`Fetching attester duties for ${requestBody.length} validators in epoch ${epoch}:`, requestBody);
             
             const response = await fetch(`${this.serverUrl}/api/beacon/eth/v1/validator/duties/attester/${epoch}`, {
                 method: 'POST',
@@ -691,6 +975,8 @@ class ValidatorDutiesTracker {
             });
             
             if (!response.ok) {
+                const errorText = await response.text();
+                console.error('Attester duties error response:', errorText);
                 throw new Error(`HTTP error! status: ${response.status}`);
             }
             
@@ -701,8 +987,16 @@ class ValidatorDutiesTracker {
                 return [];
             }
             
-            console.log(`Found ${data.data.length} attester duties`);
-            return data.data || [];
+            console.log(`Found ${data.data.length} attester duties for epoch ${epoch}`);
+            
+            // Filter to only include duties for our tracked validators
+            const filtered = data.data.filter(duty => {
+                return this.validators.includes(duty.pubkey) || 
+                       this.validators.includes(duty.validator_index?.toString());
+            });
+            
+            console.log(`Filtered to ${filtered.length} attester duties for tracked validators`);
+            return filtered;
         } catch (error) {
             console.error('fetchAttesterDuties error:', error);
             throw new Error(`Failed to fetch attester duties: ${error.message}`);
@@ -985,27 +1279,29 @@ class ValidatorDutiesTracker {
         const syncPeriod = Math.floor(currentEpoch / 256);
         const epochsInPeriod = currentEpoch % 256;
         const epochsRemaining = 256 - epochsInPeriod;
+        const epochsElapsed = epochsInPeriod;
         const timeRemaining = epochsRemaining * 32 * 12 * 1000; // epochs * slots * seconds * ms
+        const timeElapsed = epochsElapsed * 32 * 12 * 1000; // epochs * slots * seconds * ms
         
         let html = `
             <div class="network-overview">
                 <!-- Sync Committee Info at Top -->
                 <div class="sync-committee-summary">
-                    <div class="sync-summary-item" title="Period ${syncPeriod} | Epochs ${syncPeriod * 256} - ${(syncPeriod + 1) * 256 - 1}">
+                    <div class="sync-summary-item clickable" onclick="app.showSyncCommitteeMembers('current')" title="Period ${syncPeriod} | Epochs ${syncPeriod * 256} - ${(syncPeriod + 1) * 256 - 1} | Click to view members">
                         <div class="sync-summary-header">Current Sync Committee</div>
                         <div class="sync-summary-content">
                             <span class="sync-validators-count">${syncCommitteeSize}</span> validators
                             <span class="sync-time-remaining">
-                                ${this.formatTimeUntil(timeRemaining)} (${epochsRemaining} epochs)
+                                Started ${this.formatTimeAgo(timeElapsed)} ago (${epochsElapsed} epochs)
                             </span>
                         </div>
                     </div>
-                    <div class="sync-summary-item" title="Period ${syncPeriod + 1} | Starts at epoch ${(syncPeriod + 1) * 256}">
+                    <div class="sync-summary-item clickable" onclick="app.showSyncCommitteeMembers('next')" title="Period ${syncPeriod + 1} | Starts at epoch ${(syncPeriod + 1) * 256} | Click to view members">
                         <div class="sync-summary-header">Next Sync Committee</div>
                         <div class="sync-summary-content">
                             <span class="sync-validators-count">${nextSyncSize}</span> validators
                             <span class="sync-time-remaining">
-                                Starts in ${epochsRemaining} epochs
+                                Starts in ${this.formatTimeUntil(timeRemaining)} (${epochsRemaining} epochs)
                             </span>
                         </div>
                     </div>
@@ -1088,15 +1384,13 @@ class ValidatorDutiesTracker {
                 
                 // Format time display
                 let timeDisplay;
-                if (isPast) {
-                    timeDisplay = `Passed ${this.formatTimeAgo(-timeUntil)} ago`;
-                } else {
-                    timeDisplay = this.formatTimeUntil(timeUntil);
-                }
+                let blocksDisplay = Math.abs(blocksFromNow) + ' block' + (Math.abs(blocksFromNow) !== 1 ? 's' : '');
                 
-                const blocksDisplay = isPast 
-                    ? `${Math.abs(blocksFromNow)} blocks ago`
-                    : `in ${blocksFromNow} block${blocksFromNow !== 1 ? 's' : ''}`;
+                if (isPast) {
+                    timeDisplay = `Passed ${this.formatTimeAgo(-timeUntil)} ago | ${blocksDisplay}`;
+                } else {
+                    timeDisplay = `in ${this.formatTimeUntil(timeUntil)} | ${blocksDisplay}`;
+                }
                 
                 // Create clickable validator badge
                 const validatorBadge = validatorIndex 
@@ -1108,7 +1402,7 @@ class ValidatorDutiesTracker {
                         <div class="proposer-header">
                             <div class="proposer-slot-info">
                                 <span class="proposer-slot" title="Epoch ${Math.floor(duty.slot / 32)}">Slot ${duty.slot}</span>
-                                <span class="time-to-block" data-slot="${duty.slot}">${timeDisplay}, ${blocksDisplay}</span>
+                                <span class="time-to-block" data-slot="${duty.slot}">${timeDisplay}</span>
                             </div>
                             ${validatorBadge}
                         </div>
@@ -1163,10 +1457,10 @@ class ValidatorDutiesTracker {
         const hours = Math.floor(minutes / 60);
         const days = Math.floor(hours / 24);
         
-        if (days > 0) return `${days}d ago`;
-        if (hours > 0) return `${hours}h ago`;
-        if (minutes > 0) return `${minutes}m ago`;
-        return `${seconds}s ago`;
+        if (days > 0) return `${days}d`;
+        if (hours > 0) return `${hours}h`;
+        if (minutes > 0) return `${minutes}m`;
+        return `${seconds}s`;
     }
 
     getUrgencyClass(timeUntil) {
@@ -1203,6 +1497,59 @@ class ValidatorDutiesTracker {
         }
     }
     
+    showSyncCommitteeMembers(period) {
+        const modal = document.getElementById('syncCommitteeModal');
+        const modalTitle = document.getElementById('modalTitle');
+        const modalBody = document.getElementById('modalBody');
+        
+        const validators = period === 'current' 
+            ? this.networkOverview.currentSyncCommittee 
+            : this.networkOverview.nextSyncCommittee;
+        
+        const currentEpoch = Math.floor(this.getCurrentSlotSync() / 32);
+        const syncPeriod = Math.floor(currentEpoch / 256);
+        const epochsInPeriod = currentEpoch % 256;
+        const epochsRemaining = 256 - epochsInPeriod;
+        const epochsElapsed = epochsInPeriod;
+        const timeRemaining = epochsRemaining * 32 * 12 * 1000;
+        const timeElapsed = epochsElapsed * 32 * 12 * 1000;
+        
+        modalTitle.textContent = period === 'current' 
+            ? `Current Sync Committee (${validators.length} validators)`
+            : `Next Sync Committee (${validators.length} validators)`;
+        
+        // Create validator grid
+        let html = `
+            <div class="sync-info">
+                <p>${period === 'current' 
+                    ? `Period ${syncPeriod} • Epochs ${syncPeriod * 256}-${(syncPeriod + 1) * 256 - 1} • Started ${this.formatTimeAgo(timeElapsed)} ago` 
+                    : `Period ${syncPeriod + 1} • Epochs ${(syncPeriod + 1) * 256}-${(syncPeriod + 2) * 256 - 1} • Starts in ${this.formatTimeUntil(timeRemaining)}`}</p>
+            </div>
+            <div class="validator-grid">
+        `;
+        
+        validators.forEach(validatorIndex => {
+            const isTracked = this.validators.includes(validatorIndex.toString());
+            const color = isTracked ? this.getValidatorColor(validatorIndex.toString()) : '#6b7280';
+            
+            html += `
+                <a href="https://beaconcha.in/validator/${validatorIndex}" target="_blank" 
+                   class="validator-badge ${isTracked ? 'tracked' : ''}" 
+                   style="background-color: ${color}; display: block; text-align: center; padding: 8px;">
+                    #${validatorIndex}
+                </a>
+            `;
+        });
+        
+        html += '</div>';
+        modalBody.innerHTML = html;
+        modal.classList.add('active');
+    }
+    
+    closeSyncCommitteeModal() {
+        document.getElementById('syncCommitteeModal').classList.remove('active');
+    }
+    
     loadNotificationSettings() {
         // Load saved settings
         const settings = {
@@ -1222,11 +1569,13 @@ class ValidatorDutiesTracker {
         ['notifyProposer', 'notifyAttester', 'notifySync'].forEach(id => {
             document.getElementById(id).addEventListener('change', (e) => {
                 sessionStorage.setItem(id, e.target.checked);
+                this.sendNotificationSettingsUpdate();
             });
         });
         
         document.getElementById('notifyMinutes').addEventListener('change', (e) => {
             sessionStorage.setItem('notifyMinutes', e.target.value);
+            this.sendNotificationSettingsUpdate();
         });
     }
 
