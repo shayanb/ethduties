@@ -115,7 +115,9 @@ Open http://localhost:3000 in your browser.
 
 2. **Add Validators**:
    - Enter validator public key (0x...) or validator index
-   - Tip: Use indices for better performance with many validators
+   - Paste comma-separated list of validators (e.g., `1234,5678,9012`)
+   - Import from JSON file using the Import button (includes all settings)
+   - Export all validators with labels and settings using the Export button
 
 3. **Fetch Duties**:
    - Click "Fetch Duties" to retrieve upcoming duties
@@ -130,6 +132,46 @@ Open http://localhost:3000 in your browser.
 - Choose which duty types to notify about
 - Set notification threshold (5 min to 1 hour before duty)
 - Notifications automatically trigger when duties approach
+
+## Import/Export Format
+
+### CSV Format
+Simply paste a comma-separated list of validators:
+```
+1234,5678,9012,0x1234...5678
+```
+
+### JSON Format
+```json
+{
+  "version": "1.1",
+  "exportDate": "2024-01-01T00:00:00.000Z",
+  "settings": {
+    "beaconUrl": "http://localhost:5052",
+    "notifications": {
+      "proposer": true,
+      "attester": true,
+      "sync": true,
+      "minutesBefore": 5
+    },
+    "telegram": {
+      "enabled": true,
+      "chatId": "123456789"
+    },
+    "browser": {
+      "enabled": true
+    },
+    "autoRefresh": true
+  },
+  "validators": [
+    {
+      "index": 1234,
+      "label": "My Validator 1",
+      "pubkey": "0x..." // Added during export if available
+    }
+  ]
+}
+```
 
 ## Technical Details
 

@@ -25,12 +25,24 @@
             <section class="validators-section">
                 <h2>Add Validators</h2>
                 <div class="add-validator-form">
-                    <div class="form-group">
-                        <label for="validatorInput">Validator Public Key or Index:</label>
-                        <input type="text" id="validatorInput" placeholder="0x... or validator index">
-                        <button id="addValidatorBtn" class="btn-primary">Add Validator</button>
+                    <div class="form-content">
+                        <div class="input-group">
+                            <label for="validatorInput">Validator Public Key, Index, or Comma-Separated List:</label>
+                            <div class="input-row">
+                                <input type="text" id="validatorInput" placeholder="0x... or validator index (e.g., 1234,5678,9012)">
+                                <button id="addValidatorBtn" class="btn-add">➕ Add Validator</button>
+                            </div>
+                        </div>
+                        <div class="batch-operations">
+                            <button id="importBtn" class="btn-secondary" title="Import validators from JSON file">
+                                📥 Import
+                            </button>
+                            <button id="exportBtn" class="btn-secondary" title="Export all validators to JSON">
+                                📤 Export
+                            </button>
+                        </div>
                     </div>
-                    <small>Tip: Use validator indices for better performance with many validators</small>
+                    <input type="file" id="importFile" accept=".json" style="display: none;">
                 </div>
 
                 <div class="validators-list">

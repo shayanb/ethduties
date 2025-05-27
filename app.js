@@ -58,6 +58,18 @@ class ValidatorDutiesTracker {
             }
         });
         
+        // Import/Export buttons
+        document.getElementById('importBtn').addEventListener('click', () => {
+            document.getElementById('importFile').click();
+        });
+        
+        document.getElementById('importFile').addEventListener('change', (e) => {
+            this.handleImport(e.target.files[0]);
+            e.target.value = ''; // Reset file input
+        });
+        
+        document.getElementById('exportBtn').addEventListener('click', () => this.exportValidators());
+        
         document.getElementById('fetchDutiesBtn').addEventListener('click', () => this.fetchAllDuties());
         document.getElementById('clearCacheBtn').addEventListener('click', () => this.clearCache());
         document.getElementById('fetchNetworkBtn').addEventListener('click', () => this.fetchNetworkOverviewOnly());
@@ -953,6 +965,36 @@ class ValidatorDutiesTracker {
     saveNotifiedDuties() {
         sessionStorage.setItem('notifiedDuties', JSON.stringify([...this.notifiedDuties]));
     }
+    
+    // Validate validator index (positive integer)
+    isValidValidatorIndex(index) {
+        const num = parseInt(index);
+        return !isNaN(num) && num >= 0 && num.toString() === index.trim();
+    }
+    
+    // Validate Ethereum public key format
+    isValidPubkey(pubkey) {
+        // Ethereum public keys are 48 bytes (96 hex chars) with 0x prefix
+        const regex = /^0x[a-fA-F0-9]{96}$/;
+        return regex.test(pubkey);
+    }
+    
+    // Validate and sanitize validator input
+    validateValidatorInput(input) {
+        const trimmed = input.trim();
+        
+        // Check if it's a valid index
+        if (this.isValidValidatorIndex(trimmed)) {
+            return { valid: true, type: 'index', value: trimmed };
+        }
+        
+        // Check if it's a valid pubkey
+        if (this.isValidPubkey(trimmed)) {
+            return { valid: true, type: 'pubkey', value: trimmed };
+        }
+        
+        return { valid: false, type: null, value: null };
+    }
 
     async addValidator() {
         const input = document.getElementById('validatorInput');
@@ -963,21 +1005,58 @@ class ValidatorDutiesTracker {
             return;
         }
         
+        // Check if it's CSV input (contains comma)
+        if (validator.includes(',') || validator.includes('\n')) {
+            this.handleCSVInput(validator);
+            return;
+        }
+        
+        // Validate input format
+        const validation = this.validateValidatorInput(validator);
+        if (!validation.valid) {
+            this.showError('Invalid format. Please enter a valid validator index (e.g., 1234) or public key (0x...)');
+            return;
+        }
+        
         // If it's a pubkey, try to convert it to index
-        if (validator.startsWith('0x')) {
-            this.showLoading(true, 'Converting pubkey...');
+        if (validation.type === 'pubkey') {
+            this.showLoading(true, 'Validating pubkey...');
             try {
                 const validatorInfo = await this.getValidatorInfo(validator);
                 if (validatorInfo && validatorInfo.index) {
                     console.log(`Converting pubkey ${validator} to index ${validatorInfo.index}`);
                     validator = validatorInfo.index.toString();
                 } else {
-                    this.showError('Could not find validator index for this pubkey');
+                    this.showError('Validator not found on the beacon chain. Please check the pubkey.');
                     this.showLoading(false);
                     return;
                 }
             } catch (error) {
-                this.showError('Failed to fetch validator info. Please check the pubkey.');
+                if (error.message.includes('beacon node')) {
+                    this.showError('Cannot connect to beacon node. Please check your configuration.');
+                } else {
+                    this.showError('Invalid validator pubkey or not found on the network.');
+                }
+                this.showLoading(false);
+                return;
+            }
+            this.showLoading(false);
+        } else {
+            // For index, verify it exists on the beacon chain
+            this.showLoading(true, 'Validating index...');
+            try {
+                const validatorInfo = await this.getValidatorInfo(validator);
+                if (!validatorInfo) {
+                    this.showError(`Validator ${validator} not found on the beacon chain.`);
+                    this.showLoading(false);
+                    return;
+                }
+            } catch (error) {
+                if (error.message.includes('beacon node')) {
+                    this.showError('Cannot connect to beacon node. Please check your configuration.');
+                } else {
+                    this.showError(`Validator ${validator} not found or invalid.`);
+                }
                 this.showLoading(false);
                 return;
             }
@@ -1107,11 +1186,19 @@ class ValidatorDutiesTracker {
                 const errorText = await response.text();
                 console.error(`Failed to fetch validator info for ${validator}:`, response.status, errorText);
                 
-                // If beacon node is unavailable, show user-friendly error
+                // If beacon node is unavailable, throw specific error
                 if (response.status === 500 && errorText.includes('ECONNREFUSED')) {
                     this.showBeaconNodeError();
+                    throw new Error('Cannot connect to beacon node');
                 }
-                return null;
+                
+                // If validator not found (404), return null
+                if (response.status === 404) {
+                    return null;
+                }
+                
+                // For other errors, throw
+                throw new Error(`Failed to fetch validator info: ${response.status}`);
             }
             
             const data = await response.json();
@@ -1121,7 +1208,8 @@ class ValidatorDutiesTracker {
             } : null;
         } catch (error) {
             console.error(`Error fetching validator info for ${validator}:`, error);
-            return null;
+            // Re-throw the error so it can be caught by the caller
+            throw error;
         }
     }
     
@@ -2291,15 +2379,28 @@ class ValidatorDutiesTracker {
         // Hide loading indicator
         indicator.classList.add('hidden');
         
-        // Show status message
-        statusMsg.textContent = message;
+        // Clear any existing timeout
+        if (this.statusTimeout) {
+            clearTimeout(this.statusTimeout);
+        }
+        
+        // Reset classes and show message
         statusMsg.className = `status-message ${type}`;
-        statusMsg.classList.remove('hidden');
+        statusMsg.textContent = message;
+        
+        // Force reflow to ensure animation plays
+        void statusMsg.offsetWidth;
         
         // Auto-hide after duration
         if (duration > 0) {
-            setTimeout(() => {
+            this.statusTimeout = setTimeout(() => {
                 statusMsg.classList.add('hidden');
+                // Remove from DOM after animation completes
+                setTimeout(() => {
+                    if (statusMsg.classList.contains('hidden')) {
+                        statusMsg.textContent = '';
+                    }
+                }, 300);
             }, duration);
         }
     }
@@ -2327,6 +2428,296 @@ class ValidatorDutiesTracker {
     hideError() {
         document.getElementById('errorMessage').classList.add('hidden');
         document.getElementById('statusMessage').classList.add('hidden');
+    }
+    
+    // CSV Import handling
+    async handleCSVInput(csvText) {
+        // Split by comma, newline, or semicolon and filter empty values
+        const validators = csvText.split(/[,\n;]+/).map(v => v.trim()).filter(v => v);
+        let addedCount = 0;
+        let errorCount = 0;
+        let invalidCount = 0;
+        const errors = [];
+        
+        this.showLoading(true, 'Processing validators...');
+        
+        for (const validatorId of validators) {
+            if (!validatorId) continue;
+            
+            // Validate format first
+            const validation = this.validateValidatorInput(validatorId);
+            if (!validation.valid) {
+                invalidCount++;
+                errors.push(`${validatorId}: Invalid format`);
+                continue;
+            }
+            
+            try {
+                let validator = validatorId;
+                
+                if (validation.type === 'pubkey') {
+                    const validatorInfo = await this.getValidatorInfo(validatorId);
+                    if (validatorInfo && validatorInfo.index) {
+                        validator = validatorInfo.index.toString();
+                    } else {
+                        errorCount++;
+                        errors.push(`${validatorId}: Not found on beacon chain`);
+                        continue;
+                    }
+                } else {
+                    // Verify index exists
+                    const validatorInfo = await this.getValidatorInfo(validator);
+                    if (!validatorInfo) {
+                        errorCount++;
+                        errors.push(`${validator}: Not found on beacon chain`);
+                        continue;
+                    }
+                }
+                
+                // Check if already added
+                if (!this.validators.includes(validator)) {
+                    this.validators.push(validator);
+                    this.assignValidatorColor(validator);
+                    addedCount++;
+                }
+            } catch (error) {
+                console.error(`Error adding validator ${validatorId}:`, error);
+                errorCount++;
+                errors.push(`${validatorId}: ${error.message.includes('beacon node') ? 'Connection error' : 'Validation failed'}`);
+            }
+        }
+        
+        this.showLoading(false);
+        
+        if (addedCount > 0) {
+            this.saveValidators();
+            this.renderValidators();
+            this.updateTelegramSubscriptionSilent();
+            document.getElementById('validatorInput').value = '';
+            
+            let message = `Added ${addedCount} validator(s)`;
+            if (errorCount > 0 || invalidCount > 0) {
+                message += `, ${errorCount + invalidCount} failed`;
+            }
+            this.showSuccess(message);
+            
+            // Show detailed errors if any
+            if (errors.length > 0 && errors.length <= 5) {
+                setTimeout(() => {
+                    this.showError(`Failed validators: ${errors.join('; ')}`);
+                }, 100);
+            } else if (errors.length > 5) {
+                setTimeout(() => {
+                    this.showError(`${errors.length} validators failed validation`);
+                }, 100);
+            }
+            
+            if (this.validators.length === addedCount) {
+                this.fetchAllDuties();
+            }
+        } else {
+            if (invalidCount > 0) {
+                this.showError(`All ${invalidCount} entries have invalid format`);
+            } else if (errorCount > 0) {
+                this.showError('No validators could be added. Check beacon node connection.');
+            } else {
+                this.showError('No valid validators found');
+            }
+        }
+    }
+    
+    // JSON Import handling
+    async handleImport(file) {
+        if (!file) return;
+        
+        const reader = new FileReader();
+        reader.onload = async (e) => {
+            try {
+                const data = JSON.parse(e.target.result);
+                
+                if (!Array.isArray(data.validators)) {
+                    throw new Error('Invalid format: expected { validators: [...] }');
+                }
+                
+                let addedCount = 0;
+                let errorCount = 0;
+                let settingsRestored = false;
+                
+                this.showLoading(true, 'Importing configuration...');
+                
+                // Import settings if available (version 1.1+)
+                if (data.settings) {
+                    try {
+                        // Restore beacon URL
+                        if (data.settings.beaconUrl) {
+                            this.beaconUrl = data.settings.beaconUrl;
+                            document.getElementById('beaconUrl').value = data.settings.beaconUrl;
+                            sessionStorage.setItem('beaconUrl', data.settings.beaconUrl);
+                        }
+                        
+                        // Restore notification settings
+                        if (data.settings.notifications) {
+                            document.getElementById('notifyProposer').checked = data.settings.notifications.proposer || false;
+                            document.getElementById('notifyAttester').checked = data.settings.notifications.attester || false;
+                            document.getElementById('notifySync').checked = data.settings.notifications.sync || false;
+                            document.getElementById('notifyMinutes').value = data.settings.notifications.minutesBefore || 5;
+                        }
+                        
+                        // Restore Telegram settings
+                        if (data.settings.telegram) {
+                            if (data.settings.telegram.chatId) {
+                                sessionStorage.setItem('telegramChatId', data.settings.telegram.chatId);
+                                document.getElementById('telegramChatId').value = data.settings.telegram.chatId;
+                            }
+                            sessionStorage.setItem('telegramEnabled', data.settings.telegram.enabled ? 'true' : 'false');
+                            this.updateNotificationStatus();
+                        }
+                        
+                        // Restore browser notification setting
+                        if (data.settings.browser) {
+                            sessionStorage.setItem('browserNotifications', data.settings.browser.enabled ? 'true' : 'false');
+                            this.updateNotificationStatus();
+                        }
+                        
+                        // Restore auto-refresh
+                        if (data.settings.autoRefresh !== undefined) {
+                            sessionStorage.setItem('autoRefresh', data.settings.autoRefresh ? 'true' : 'false');
+                            document.getElementById('autoRefresh').checked = data.settings.autoRefresh;
+                            if (data.settings.autoRefresh) {
+                                this.startAutoRefresh();
+                            }
+                        }
+                        
+                        settingsRestored = true;
+                    } catch (error) {
+                        console.error('Error restoring settings:', error);
+                    }
+                }
+                
+                // Import validators
+                for (const item of data.validators) {
+                    try {
+                        const validator = item.index?.toString();
+                        if (!validator) {
+                            errorCount++;
+                            continue;
+                        }
+                        
+                        if (!this.validators.includes(validator)) {
+                            this.validators.push(validator);
+                            this.assignValidatorColor(validator);
+                            
+                            // Set custom label if provided
+                            if (item.label) {
+                                this.setValidatorCustomLabel(validator, item.label);
+                            }
+                            
+                            addedCount++;
+                        }
+                    } catch (error) {
+                        console.error('Error importing validator:', error);
+                        errorCount++;
+                    }
+                }
+                
+                this.showLoading(false);
+                
+                if (addedCount > 0 || settingsRestored) {
+                    this.saveValidators();
+                    this.renderValidators();
+                    this.updateTelegramSubscriptionSilent();
+                    
+                    let message = '';
+                    if (addedCount > 0) {
+                        message = `Imported ${addedCount} validator(s)${errorCount > 0 ? `, ${errorCount} failed` : ''}`;
+                    }
+                    if (settingsRestored) {
+                        message += (message ? ' and ' : 'Imported ') + 'settings';
+                    }
+                    this.showSuccess(message);
+                    
+                    if (this.validators.length === addedCount) {
+                        this.fetchAllDuties();
+                    }
+                } else {
+                    this.showError('No new validators or settings imported');
+                }
+            } catch (error) {
+                console.error('Import error:', error);
+                this.showError('Failed to import file: ' + error.message);
+            }
+        };
+        
+        reader.readAsText(file);
+    }
+    
+    // Export validators to JSON
+    async exportValidators() {
+        if (this.validators.length === 0) {
+            this.showError('No validators to export');
+            return;
+        }
+        
+        const exportData = {
+            version: '1.1',
+            exportDate: new Date().toISOString(),
+            settings: {
+                beaconUrl: this.beaconUrl,
+                notifications: {
+                    proposer: document.getElementById('notifyProposer').checked,
+                    attester: document.getElementById('notifyAttester').checked,
+                    sync: document.getElementById('notifySync').checked,
+                    minutesBefore: parseInt(document.getElementById('notifyMinutes').value)
+                },
+                telegram: {
+                    enabled: sessionStorage.getItem('telegramEnabled') === 'true',
+                    chatId: sessionStorage.getItem('telegramChatId') || ''
+                },
+                browser: {
+                    enabled: sessionStorage.getItem('browserNotifications') === 'true'
+                },
+                autoRefresh: sessionStorage.getItem('autoRefresh') === 'true'
+            },
+            validators: []
+        };
+        
+        this.showLoading(true, 'Preparing export...');
+        
+        // Gather validator data with labels
+        for (const validator of this.validators) {
+            const label = this.getValidatorCustomLabel(validator);
+            const validatorData = {
+                index: parseInt(validator),
+                label: label || ''
+            };
+            
+            // Try to get pubkey if available
+            try {
+                const info = await this.getValidatorInfo(validator);
+                if (info && info.pubkey) {
+                    validatorData.pubkey = info.pubkey;
+                }
+            } catch (error) {
+                console.error(`Could not fetch pubkey for validator ${validator}`);
+            }
+            
+            exportData.validators.push(validatorData);
+        }
+        
+        this.showLoading(false);
+        
+        // Create and download file
+        const blob = new Blob([JSON.stringify(exportData, null, 2)], { type: 'application/json' });
+        const url = URL.createObjectURL(blob);
+        const a = document.createElement('a');
+        a.href = url;
+        a.download = `ethduties-config-${new Date().toISOString().split('T')[0]}.json`;
+        document.body.appendChild(a);
+        a.click();
+        document.body.removeChild(a);
+        URL.revokeObjectURL(url);
+        
+        this.showSuccess(`Exported ${this.validators.length} validator(s) with settings`);
     }
 }
 
