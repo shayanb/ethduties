@@ -784,16 +784,30 @@ class ValidatorDutiesTracker {
         
         if (notifySync) {
             this.duties.sync.forEach(duty => {
-                // Check if we should notify about sync committee
-                const dutyKey = `sync-${duty.period}-${duty.validator}`;
-                if (!this.notifiedDuties.has(dutyKey)) {
-                    // Notify once when validator enters sync committee
-                    if (duty.period === 'current' || duty.period === 'next') {
-                        duty.slot = this.getCurrentSlotSync(); // Add slot for notification system
-                        this.checkAndNotifyDuty('Sync Committee', duty, 60); // Always notify within 60 minutes for sync
+                const currentEpoch = Math.floor(this.getCurrentSlotSync() / 32);
+                
+                if (duty.period === 'current') {
+                    // For current sync committee, notify once
+                    const dutyKey = `sync-current-${duty.validator}`;
+                    if (!this.notifiedDuties.has(dutyKey)) {
+                        duty.slot = this.getCurrentSlotSync();
+                        this.checkAndNotifyDuty('Sync Committee', duty, 60);
                         this.notifiedDuties.add(dutyKey);
                         this.saveNotifiedDuties();
                     }
+                } else if (duty.period === 'next') {
+                    // For next sync committee, calculate when it starts and notify appropriately
+                    const epochsUntil = duty.from_epoch - currentEpoch;
+                    const slotsUntil = epochsUntil * 32;
+                    const nextSyncStartSlot = this.getCurrentSlotSync() + slotsUntil;
+                    
+                    // Create a duty object with the calculated slot
+                    const nextSyncDuty = {
+                        ...duty,
+                        slot: nextSyncStartSlot
+                    };
+                    
+                    this.checkAndNotifyDuty('Next Sync Committee', nextSyncDuty, notifyMinutes);
                 }
             });
         }
@@ -844,6 +858,8 @@ class ValidatorDutiesTracker {
                         message = `📝 Attestation Duty\nIn ${minutesUntil} minute${minutesUntil === 1 ? '' : 's'}\n\nValidator: [${validatorDisplay}](https://beaconcha.in/validator/${index})\nSlot: [${duty.slot}](https://beaconcha.in/slot/${duty.slot})`;
                     } else if (type === 'Sync Committee') {
                         message = `🔐💎 SYNC COMMITTEE 💎🔐\n\nValidator: [${validatorDisplay}](https://beaconcha.in/validator/${index})\n${duty.period === 'current' ? 'Currently active' : 'Starting soon'}\n~27 hours of enhanced rewards`;
+                    } else if (type === 'Next Sync Committee') {
+                        message = `🔮💎 NEXT SYNC COMMITTEE 💎🔮\nStarting in ${minutesUntil} minute${minutesUntil === 1 ? '' : 's'}\n\nValidator: [${validatorDisplay}](https://beaconcha.in/validator/${index})\n~27 hours of enhanced rewards ahead!`;
                     } else {
                         message = `🚨 Validator [${validatorDisplay}](https://beaconcha.in/validator/${index}) has a ${type} duty in ${minutesUntil} minute${minutesUntil === 1 ? '' : 's'} (slot [${duty.slot}](https://beaconcha.in/slot/${duty.slot}))`;
                     }
@@ -1670,18 +1686,42 @@ class ValidatorDutiesTracker {
                 this.networkOverview.allProposers = data.data || [];
             }
             
-            // Fetch sync committee
-            const syncResponse = await fetch(`${this.serverUrl}/api/beacon/eth/v1/beacon/states/head/sync_committees`, {
+            // Fetch sync committees with epoch-specific requests
+            const currentSyncPeriod = Math.floor(currentEpoch / 256);
+            const nextSyncPeriodFirstEpoch = (currentSyncPeriod + 1) * 256;
+            
+            const currentSyncUrl = `${this.serverUrl}/api/beacon/eth/v1/beacon/states/head/sync_committees`;
+            const nextSyncUrl = `${this.serverUrl}/api/beacon/eth/v1/beacon/states/head/sync_committees?epoch=${nextSyncPeriodFirstEpoch}`;
+            
+            console.log('Current sync committee URL:', currentSyncUrl);
+            console.log('Next sync committee URL:', nextSyncUrl);
+            console.log('Current epoch:', currentEpoch, 'Next period first epoch:', nextSyncPeriodFirstEpoch);
+            
+            // Fetch current sync committee
+            const currentSyncResponse = await fetch(currentSyncUrl, {
                 method: 'POST',
                 headers: { 'Content-Type': 'application/json' },
                 body: JSON.stringify({ beaconUrl: this.beaconUrl })
             });
             
-            if (syncResponse.ok) {
-                const data = await syncResponse.json();
+            // Fetch next sync committee using the first epoch of the next period
+            const nextSyncResponse = await fetch(nextSyncUrl, {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ beaconUrl: this.beaconUrl })
+            });
+            
+            if (currentSyncResponse.ok) {
+                const data = await currentSyncResponse.json();
                 if (data.data) {
                     this.networkOverview.currentSyncCommittee = data.data.validators || [];
-                    this.networkOverview.nextSyncCommittee = data.data.next_validators || [];
+                }
+            }
+            
+            if (nextSyncResponse.ok) {
+                const data = await nextSyncResponse.json();
+                if (data.data) {
+                    this.networkOverview.nextSyncCommittee = data.data.validators || [];
                 }
             }
             
@@ -1956,12 +1996,16 @@ class ValidatorDutiesTracker {
             
             if (duty.period === 'current') {
                 const remainingEpochs = duty.until_epoch - currentEpoch;
+                const remainingTime = remainingEpochs * 32 * 12 * 1000; // epochs * slots * seconds * ms
+                const timeFormatted = this.formatTimeUntil(remainingTime);
                 dutyInfo = `Current sync committee member`;
-                timeDisplay = `${remainingEpochs} epochs remaining`;
+                timeDisplay = `${timeFormatted} / ${remainingEpochs} epochs remaining`;
             } else {
                 const epochsUntil = duty.from_epoch - currentEpoch;
+                const timeUntil = epochsUntil * 32 * 12 * 1000; // epochs * slots * seconds * ms
+                const timeFormatted = this.formatTimeUntil(timeUntil);
                 dutyInfo = `Next sync committee member`;
-                timeDisplay = `Starts in ${epochsUntil} epochs`;
+                timeDisplay = `Starts in ${timeFormatted} / ${epochsUntil} epochs`;
             }
             
             const color = this.getValidatorColor(duty.validator);
@@ -2015,12 +2059,22 @@ class ValidatorDutiesTracker {
         const timeRemaining = epochsRemaining * 32 * 12 * 1000; // epochs * slots * seconds * ms
         const timeElapsed = epochsElapsed * 32 * 12 * 1000; // epochs * slots * seconds * ms
         
+        // Count tracked validators in sync committees
+        const trackedInCurrent = this.networkOverview.currentSyncCommittee.filter(v => 
+            this.validators.includes(v) || this.validators.includes(v.toString())
+        );
+        const trackedInNext = this.networkOverview.nextSyncCommittee.filter(v => 
+            this.validators.includes(v) || this.validators.includes(v.toString())
+        );
+        
         let html = `
             <div class="network-overview">
                 <!-- Sync Committee Info at Top -->
                 <div class="sync-committee-summary">
                     <div class="sync-summary-item clickable" onclick="app.showSyncCommitteeMembers('current')" title="Period ${syncPeriod} | Epochs ${syncPeriod * 256} - ${(syncPeriod + 1) * 256 - 1} | Click to view members">
-                        <div class="sync-summary-header">Current Sync Committee</div>
+                        <div class="sync-summary-header">Current Sync Committee
+                            ${trackedInCurrent.length > 0 ? `<span class="validator-count-tag">You have ${trackedInCurrent.length}</span>` : ''}
+                        </div>
                         <div class="sync-summary-content">
                             <span class="sync-validators-count">${syncCommitteeSize}</span> validators
                             <span class="sync-time-remaining">
@@ -2029,7 +2083,9 @@ class ValidatorDutiesTracker {
                         </div>
                     </div>
                     <div class="sync-summary-item clickable" onclick="app.showSyncCommitteeMembers('next')" title="Period ${syncPeriod + 1} | Starts at epoch ${(syncPeriod + 1) * 256} | Click to view members">
-                        <div class="sync-summary-header">Next Sync Committee</div>
+                        <div class="sync-summary-header">Next Sync Committee
+                            ${trackedInNext.length > 0 ? `<span class="validator-count-tag">You have ${trackedInNext.length}</span>` : ''}
+                        </div>
                         <div class="sync-summary-content">
                             <span class="sync-validators-count">${nextSyncSize}</span> validators
                             <span class="sync-time-remaining">
@@ -2037,32 +2093,6 @@ class ValidatorDutiesTracker {
                             </span>
                         </div>
                     </div>
-        `;
-        
-        // Show tracked validators in sync committee
-        const trackedInCurrent = this.networkOverview.currentSyncCommittee.filter(v => 
-            this.validators.includes(v) || this.validators.includes(v.toString())
-        );
-        const trackedInNext = this.networkOverview.nextSyncCommittee.filter(v => 
-            this.validators.includes(v) || this.validators.includes(v.toString())
-        );
-        
-        if (trackedInCurrent.length > 0 || trackedInNext.length > 0) {
-            html += `<div class="sync-summary-item tracked">`;
-            html += `<div class="sync-summary-header">Your Validators</div>`;
-            html += `<div class="sync-summary-content">`;
-            
-            if (trackedInCurrent.length > 0) {
-                html += `<span>Current: ${trackedInCurrent.length}</span>`;
-            }
-            if (trackedInNext.length > 0) {
-                html += `<span>Next: ${trackedInNext.length}</span>`;
-            }
-            
-            html += `</div></div>`;
-        }
-        
-        html += `
                 </div>
                 
                 <div class="overview-section">

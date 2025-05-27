@@ -48,8 +48,9 @@ app.post('/api/beacon/*', async (req, res) => {
     try {
         const beaconUrl = req.body.beaconUrl || 'http://localhost:5052';
         const apiPath = req.params[0];
-        const fullUrl = `${beaconUrl}/${apiPath}`;
-        
+        // Include query parameters from the original request
+        const queryString = req.url.includes('?') ? req.url.split('?')[1] : '';
+        const fullUrl = `${beaconUrl}/${apiPath}${queryString ? '?' + queryString : ''}`;
         const options = {
             method: req.body.method || 'GET',
             headers: {
@@ -79,18 +80,24 @@ app.post('/api/sync-duties', async (req, res) => {
         
         // Sync committee assignments are stable for 256 epochs
         const syncCommitteePeriod = Math.floor(epoch / 256);
+        const nextSyncPeriodFirstEpoch = (syncCommitteePeriod + 1) * 256;
         
-        const response = await fetch(`${beaconUrl}/eth/v1/beacon/states/head/sync_committees`);
-        const data = await response.json();
+        // Fetch current sync committee
+        const currentResponse = await fetch(`${beaconUrl}/eth/v1/beacon/states/head/sync_committees`);
+        const currentData = await currentResponse.json();
         
-        if (!data.data) {
+        // Fetch next sync committee using specific epoch
+        const nextResponse = await fetch(`${beaconUrl}/eth/v1/beacon/states/head/sync_committees?epoch=${nextSyncPeriodFirstEpoch}`);
+        const nextData = await nextResponse.json();
+        
+        if (!currentData.data && !nextData.data) {
             return res.json({ data: [] });
         }
         
-        // Check which validators are in the current sync committee
+        // Check which validators are in the current and next sync committees
         const syncDuties = [];
-        const currentCommittee = data.data.validators;
-        const nextCommittee = data.data.next_validators || [];
+        const currentCommittee = currentData.data ? currentData.data.validators : [];
+        const nextCommittee = nextData.data ? nextData.data.validators : [];
         
         validators.forEach(validator => {
             const currentIndex = currentCommittee.indexOf(validator);
@@ -387,6 +394,9 @@ app.post('/api/notify', async (req, res) => {
             } else if (type === 'Sync Committee') {
                 title = '🔐💎 SYNC COMMITTEE 💎🔐';
                 body = `Validator ${validatorDisplay || validator} - Active now`;
+            } else if (type === 'Next Sync Committee') {
+                title = '🔮💎 NEXT SYNC COMMITTEE 💎🔮';
+                body = `Validator ${validatorDisplay || validator} - Starting ${duty.timeUntil}`;
             } else if (type === 'Block Confirmed' && duty.blockDetails) {
                 title = '🎉💰 BLOCK CONFIRMED! 🎉💰';
                 const details = duty.blockDetails;
