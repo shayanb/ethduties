@@ -280,12 +280,27 @@ input[type="checkbox"] {
     transition: all 0.2s ease;
     padding: 2px 4px;
     border-radius: 3px;
-    display: inline-block;
+    display: inline-flex;
+    align-items: center;
+    gap: 4px;
+}
+
+.pubkey-clickable .edit-icon {
+    opacity: 0;
+    transition: opacity 0.2s ease;
+    font-size: 0.8em;
 }
 
 .pubkey-clickable:hover {
     background-color: rgba(59, 130, 246, 0.1);
     opacity: 1;
+}
+
+.pubkey-clickable:hover .edit-icon {
+    opacity: 1;
+}
+
+.pubkey-clickable:hover .pubkey-text {
     text-decoration: underline;
 }
 
@@ -341,11 +356,57 @@ input[type="checkbox"] {
     font-size: 0.95rem;
 }
 
-.loading {
-    text-align: center;
-    padding: 40px;
-    font-size: 1.1rem;
+.loading-inline {
+    display: inline-flex;
+    align-items: center;
+    gap: 8px;
+    margin-left: 15px;
+}
+
+.spinner {
+    display: inline-block;
+    width: 16px;
+    height: 16px;
+    border: 2px solid rgba(59, 130, 246, 0.2);
+    border-top-color: var(--primary-color);
+    border-radius: 50%;
+    animation: spin 0.8s linear infinite;
+}
+
+@keyframes spin {
+    0% { transform: rotate(0deg); }
+    100% { transform: rotate(360deg); }
+}
+
+.loading-text {
     color: var(--text-secondary);
+    font-size: 0.9rem;
+}
+
+.status-message {
+    display: inline-flex;
+    align-items: center;
+    gap: 8px;
+    margin-left: 15px;
+    font-size: 0.9rem;
+    padding: 4px 8px;
+    border-radius: 4px;
+    transition: opacity 0.3s ease;
+}
+
+.status-message.error {
+    color: var(--error-color);
+    background-color: rgba(220, 38, 38, 0.1);
+}
+
+.status-message.success {
+    color: var(--success-color);
+    background-color: rgba(16, 185, 129, 0.1);
+}
+
+.status-message.info {
+    color: var(--primary-color);
+    background-color: rgba(59, 130, 246, 0.1);
 }
 
 .error-message {
@@ -932,7 +993,7 @@ select:focus {
 
 .clear-btn {
     background: var(--danger-color);
-    color: white;
+    color: var(--text-secondary);
     border: none;
     border-radius: 4px;
     padding: 4px 12px;
@@ -944,6 +1005,7 @@ select:focus {
 
 .clear-btn:hover {
     background: #dc2626;
+    color: white;
 }
 
 .remove-block-btn {
@@ -965,7 +1027,7 @@ select:focus {
 
 .remove-block-btn:hover {
     background: var(--danger-color);
-    color: white;
+    color: #dc2626;
     transform: scale(1.1);
 }
 

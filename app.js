@@ -532,9 +532,13 @@ class ValidatorDutiesTracker {
             if (!blockData.data) return;
             
             const block = blockData.data.message;
-            const graffiti = block.body.graffiti ? 
-                new TextDecoder().decode(Uint8Array.from(atob(block.body.graffiti), c => c.charCodeAt(0))).replace(/\0/g, '') : 
-                '';
+            const graffiti = block.body.graffiti
+                ? new TextDecoder().decode(
+                    Uint8Array.from(
+                        block.body.graffiti.replace(/^0x/, '').match(/.{1,2}/g).map(byte => parseInt(byte, 16))
+                    )
+                ).replace(/\0/g, '')
+                : '';
             
             // Fetch execution payload for MEV and fees
             const executionPayload = block.body.execution_payload;
@@ -822,9 +826,9 @@ class ValidatorDutiesTracker {
                     
                     let message;
                     if (type === 'Proposer') {
-                        message = `🎉💰 BLOCK PROPOSAL! 🎉💰\n\nValidator: [${validatorDisplay}](https://beaconcha.in/validator/${index})\nIn ${minutesUntil} minute${minutesUntil === 1 ? '' : 's'}\nSlot: [${duty.slot}](https://beaconcha.in/slot/${duty.slot})`;
+                        message = `🎉💰 BLOCK PROPOSAL! 🎉💰\nIn ${minutesUntil} minute${minutesUntil === 1 ? '' : 's'}\n\nValidator: [${validatorDisplay}](https://beaconcha.in/validator/${index})\nSlot: [${duty.slot}](https://beaconcha.in/slot/${duty.slot})`;
                     } else if (type === 'Attester') {
-                        message = `📝 Attestation Duty\n\nValidator: [${validatorDisplay}](https://beaconcha.in/validator/${index})\nIn ${minutesUntil} minute${minutesUntil === 1 ? '' : 's'}\nSlot: [${duty.slot}](https://beaconcha.in/slot/${duty.slot})`;
+                        message = `📝 Attestation Duty\nIn ${minutesUntil} minute${minutesUntil === 1 ? '' : 's'}\n\nValidator: [${validatorDisplay}](https://beaconcha.in/validator/${index})\nSlot: [${duty.slot}](https://beaconcha.in/slot/${duty.slot})`;
                     } else if (type === 'Sync Committee') {
                         message = `🔐💎 SYNC COMMITTEE 💎🔐\n\nValidator: [${validatorDisplay}](https://beaconcha.in/validator/${index})\n${duty.period === 'current' ? 'Currently active' : 'Starting soon'}\n~27 hours of enhanced rewards`;
                     } else {
@@ -960,7 +964,7 @@ class ValidatorDutiesTracker {
         
         // If it's a pubkey, try to convert it to index
         if (validator.startsWith('0x')) {
-            this.showLoading(true);
+            this.showLoading(true, 'Converting pubkey...');
             try {
                 const validatorInfo = await this.getValidatorInfo(validator);
                 if (validatorInfo && validatorInfo.index) {
@@ -996,6 +1000,9 @@ class ValidatorDutiesTracker {
         this.saveValidators();
         this.renderValidators();
         input.value = '';
+        
+        // Show success message
+        this.showSuccess(`Validator ${validator} added successfully`);
         
         // Update Telegram subscription if enabled
         this.updateTelegramSubscriptionSilent();
@@ -1210,7 +1217,11 @@ class ValidatorDutiesTracker {
                 if (info && info.pubkey) {
                     const preview = validatorItem.querySelector('.validator-pubkey-preview');
                     if (preview) {
-                        preview.innerHTML = `<span class="pubkey-clickable" onclick="app.editValidatorLabel('${validator}', event)" title="Click to edit label">${info.pubkey.slice(0, 10)}...${info.pubkey.slice(-4)}</span>`;
+                        preview.innerHTML = `
+                            <span class="pubkey-clickable" onclick="app.editValidatorLabel('${validator}', event)" title="Click to edit label">
+                                <span class="pubkey-text">${info.pubkey.slice(0, 10)}...${info.pubkey.slice(-4)}</span>
+                                <span class="edit-icon">✏️</span>
+                            </span>`;
                     }
                 }
             }).catch(() => {
@@ -1333,7 +1344,7 @@ class ValidatorDutiesTracker {
             return;
         }
         
-        this.showLoading(true);
+        this.showLoading(true, 'Fetching duties...');
         this.hideError();
         
         try {
@@ -1370,7 +1381,8 @@ class ValidatorDutiesTracker {
             
         } catch (error) {
             console.error('Error fetching duties:', error);
-            this.showError(`Failed to fetch duties: ${error.message}`);
+            const isConnectionError = error.message.includes('beacon node') || error.message.includes('ECONNREFUSED');
+            this.showError(`Failed to fetch duties: ${error.message}`, isConnectionError);
         } finally {
             this.showLoading(false);
         }
@@ -2253,30 +2265,65 @@ class ValidatorDutiesTracker {
         }
     }
 
-    showLoading(show) {
-        document.getElementById('loadingIndicator').classList.toggle('hidden', !show);
+    showLoading(show, text = 'Loading...') {
+        const indicator = document.getElementById('loadingIndicator');
+        const statusMsg = document.getElementById('statusMessage');
+        
+        if (show) {
+            indicator.classList.remove('hidden');
+            statusMsg.classList.add('hidden');
+            const textElement = indicator.querySelector('.loading-text');
+            if (textElement && text) {
+                textElement.textContent = text;
+            }
+        } else {
+            indicator.classList.add('hidden');
+        }
     }
 
-    showError(message) {
-        const errorEl = document.getElementById('errorMessage');
-        errorEl.textContent = message;
-        errorEl.classList.remove('hidden');
-        errorEl.style.backgroundColor = '#fef2f2';
-        errorEl.style.color = 'var(--error-color)';
-        setTimeout(() => errorEl.classList.add('hidden'), 5000);
+    showStatus(message, type = 'info', duration = 5000) {
+        const statusMsg = document.getElementById('statusMessage');
+        const indicator = document.getElementById('loadingIndicator');
+        
+        // Hide loading indicator
+        indicator.classList.add('hidden');
+        
+        // Show status message
+        statusMsg.textContent = message;
+        statusMsg.className = `status-message ${type}`;
+        statusMsg.classList.remove('hidden');
+        
+        // Auto-hide after duration
+        if (duration > 0) {
+            setTimeout(() => {
+                statusMsg.classList.add('hidden');
+            }, duration);
+        }
+    }
+
+    showError(message, critical = false) {
+        if (critical) {
+            // Show in error message area for critical errors
+            const errorEl = document.getElementById('errorMessage');
+            errorEl.textContent = message;
+            errorEl.classList.remove('hidden');
+            errorEl.style.backgroundColor = '#fef2f2';
+            errorEl.style.color = 'var(--error-color)';
+            setTimeout(() => errorEl.classList.add('hidden'), 5000);
+        } else {
+            // Show inline status for regular errors
+            this.showStatus(message, 'error');
+        }
     }
     
     showSuccess(message) {
-        const errorEl = document.getElementById('errorMessage');
-        errorEl.textContent = message;
-        errorEl.classList.remove('hidden');
-        errorEl.style.backgroundColor = '#f0fdf4';
-        errorEl.style.color = 'var(--success-color)';
-        setTimeout(() => errorEl.classList.add('hidden'), 3000);
+        // Show inline status
+        this.showStatus(message, 'success', 3000);
     }
 
     hideError() {
         document.getElementById('errorMessage').classList.add('hidden');
+        document.getElementById('statusMessage').classList.add('hidden');
     }
 }
 

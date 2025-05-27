@@ -54,12 +54,15 @@
                             Auto-refresh every 30 seconds
                         </label>
                     </div>
+                    <div id="loadingIndicator" class="loading-inline hidden">
+                        <span class="spinner"></span>
+                        <span class="loading-text">Loading...</span>
+                    </div>
+                    <div id="statusMessage" class="status-message hidden"></div>
                 </div>
 
                 <div class="duties-display">
-                    <div id="loadingIndicator" class="loading hidden">Loading duties...</div>
                     <div id="errorMessage" class="error-message hidden"></div>
-                    
                     <div class="duties-tabs">
                         <button class="tab-btn active" data-tab="proposer">Proposer Duties</button>
                         <button class="tab-btn" data-tab="attester">Attester Duties</button>
@@ -82,7 +85,10 @@
                 <div class="controls">
                     <button id="fetchNetworkBtn" class="btn-primary">Refresh Network Data</button>
                 </div>
-                <div id="networkLoadingIndicator" class="loading hidden">Loading network data...</div>
+                <div id="networkLoadingIndicator" class="loading-inline hidden" style="margin-top: 15px;">
+                    <span class="spinner"></span>
+                    <span class="loading-text">Loading network data...</span>
+                </div>
                 <div id="networkContent"></div>
             </section>
         </div>
