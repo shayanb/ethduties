@@ -1,13 +1,21 @@
 class ValidatorDutiesTracker {
     constructor() {
-        // Load beacon URL from storage or use default
-        this.beaconUrl = sessionStorage.getItem('beaconUrl') || 'http://localhost:5052';
-        this.serverUrl = window.APP_CONFIG?.serverUrl || 'http://localhost:3000';
         this.publicBeaconUrls = [
             { name: 'PublicNode', url: 'https://ethereum-beacon-api.publicnode.com' },
             { name: 'dRPC', url: 'https://eth-beacon-chain.drpc.org/rest' },
-            { name: 'QuickNode', url: 'https://docs-demo.quiknode.pro' },
+            { name: 'QuickNode', url: 'https://docs-demo.quiknode.pro' }
         ];
+        
+        // Load beacon URL from storage or select a random public node on first load
+        this.beaconUrl = sessionStorage.getItem('beaconUrl');
+        if (!this.beaconUrl) {
+            // First load - select a random public node
+            const randomIndex = Math.floor(Math.random() * this.publicBeaconUrls.length);
+            this.beaconUrl = this.publicBeaconUrls[randomIndex].url;
+            sessionStorage.setItem('beaconUrl', this.beaconUrl);
+        }
+        
+        this.serverUrl = window.APP_CONFIG?.serverUrl || 'http://localhost:3000';
         this.autoRefreshInterval = null;
         this.notificationCheckInterval = null;
         this.countdownInterval = null;
