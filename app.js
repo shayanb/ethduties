@@ -41,6 +41,7 @@ class ValidatorDutiesTracker {
         this.renderValidators();
         this.loadCachedDuties();
         this.initializeNotifications();
+        this.initializeDashboard();
         this.startCountdownTimer();
     }
 
@@ -133,6 +134,19 @@ class ValidatorDutiesTracker {
         
         document.querySelectorAll('.tab-btn').forEach(btn => {
             btn.addEventListener('click', (e) => this.switchTab(e.target.dataset.tab));
+        });
+        
+        // Dashboard mode toggle
+        document.getElementById('dashboardModeToggle').addEventListener('click', () => this.toggleDashboardMode());
+        
+        // Dashboard exit button
+        document.getElementById('dashboardExitBtn').addEventListener('click', () => this.exitDashboardMode());
+        
+        // ESC key to exit dashboard mode
+        document.addEventListener('keydown', (e) => {
+            if (e.key === 'Escape' && this.isDashboardMode) {
+                this.exitDashboardMode();
+            }
         });
         
         document.getElementById('enableBrowserNotifications').addEventListener('click', () => this.enableBrowserNotifications());
@@ -2749,6 +2763,611 @@ class ValidatorDutiesTracker {
         
         this.showSuccess(`Exported ${this.validators.length} validator(s) with settings`);
     }
+
+    // Dashboard Mode Functionality
+    initializeDashboard() {
+        this.isDashboardMode = sessionStorage.getItem('dashboardMode') === 'true';
+        this.dashboardUpdateInterval = null;
+        this.blockStreamData = [];
+        
+        if (this.isDashboardMode) {
+            this.switchToDashboard();
+        }
+    }
+
+    toggleDashboardMode() {
+        this.isDashboardMode = !this.isDashboardMode;
+        sessionStorage.setItem('dashboardMode', this.isDashboardMode.toString());
+        
+        const toggleBtn = document.getElementById('dashboardModeToggle');
+        
+        if (this.isDashboardMode) {
+            this.switchToDashboard();
+            toggleBtn.textContent = '📋 Normal Mode';
+            toggleBtn.classList.add('active');
+        } else {
+            this.switchToNormal();
+            toggleBtn.textContent = '📊 Dashboard Mode';
+            toggleBtn.classList.remove('active');
+        }
+    }
+
+    switchToDashboard() {
+        // Hide normal pages and show dashboard
+        document.querySelectorAll('.page').forEach(page => page.classList.remove('active'));
+        document.getElementById('dashboardPage').classList.add('active');
+        
+        // Update toggle button
+        const toggleBtn = document.getElementById('dashboardModeToggle');
+        toggleBtn.textContent = '📋 Normal Mode';
+        toggleBtn.classList.add('active');
+        
+        // Force enable auto-refresh in dashboard mode
+        this.startAutoRefresh();
+        document.getElementById('autoRefresh').checked = true;
+        sessionStorage.setItem('autoRefresh', 'true');
+        
+        // Start dashboard updates
+        this.updateDashboard();
+        this.startDashboardUpdates();
+    }
+
+    switchToNormal() {
+        // Hide dashboard and show normal page
+        document.querySelectorAll('.page').forEach(page => page.classList.remove('active'));
+        document.getElementById('dutiesPage').classList.add('active');
+        
+        // Stop dashboard updates
+        this.stopDashboardUpdates();
+        
+        // Update toggle button
+        const toggleBtn = document.getElementById('dashboardModeToggle');
+        toggleBtn.textContent = '📊 Dashboard Mode';
+        toggleBtn.classList.remove('active');
+    }
+
+    exitDashboardMode() {
+        // Set dashboard mode to false
+        this.isDashboardMode = false;
+        sessionStorage.setItem('dashboardMode', 'false');
+        
+        // Switch to normal mode
+        this.switchToNormal();
+    }
+
+    startDashboardUpdates() {
+        if (this.dashboardUpdateInterval) {
+            clearInterval(this.dashboardUpdateInterval);
+        }
+        
+        // Update every 6 seconds for live dashboard feel
+        this.dashboardUpdateInterval = setInterval(() => {
+            if (this.isDashboardMode) {
+                this.updateDashboard();
+            }
+        }, 6000);
+    }
+
+    stopDashboardUpdates() {
+        if (this.dashboardUpdateInterval) {
+            clearInterval(this.dashboardUpdateInterval);
+            this.dashboardUpdateInterval = null;
+        }
+    }
+
+    updateDashboard() {
+        this.showDashboardLoading();
+        this.renderDashboardValidators();
+        this.renderDashboardDuties();
+        this.renderDashboardPastDuties();
+        this.renderDashboardNetwork();
+        this.updateCurrentSlotEpoch();
+        
+        // Hide loading indicator after 5 seconds
+        setTimeout(() => {
+            this.hideDashboardLoading();
+        }, 5000);
+    }
+    
+    showDashboardLoading() {
+        const indicator = document.getElementById('dashboardLoadingIndicator');
+        if (indicator) {
+            indicator.style.opacity = '1';
+            indicator.style.display = 'block';
+        }
+    }
+    
+    hideDashboardLoading() {
+        const indicator = document.getElementById('dashboardLoadingIndicator');
+        if (indicator) {
+            indicator.style.opacity = '0';
+            setTimeout(() => {
+                indicator.style.display = 'none';
+            }, 200);
+        }
+    }
+
+    renderDashboardValidators() {
+        const container = document.getElementById('dashboardValidators');
+        if (!container) return;
+
+        if (this.validators.length === 0) {
+            container.innerHTML = '<div style="text-align: center; color: var(--text-secondary); padding: 20px;">No validators added yet</div>';
+            return;
+        }
+
+        const html = this.validators.map(validator => {
+            const label = this.getValidatorLabel(validator);
+            const color = this.getValidatorColor(validator);
+            
+            // Count duties for this validator
+            let dutyCount = 0;
+            dutyCount += this.duties.proposer.filter(d => this.getValidatorForDuty(d) === validator).length;
+            dutyCount += this.duties.attester.filter(d => this.getValidatorForDuty(d) === validator).length;
+            dutyCount += this.duties.sync.filter(d => d.validator === validator).length;
+            
+            return `
+                <div class="dashboard-validator-item ${dutyCount > 0 ? 'has-duties' : ''}" style="border-left-color: ${color}">
+                    <div class="validator-info-compact">
+                        <div class="validator-index-compact">${validator}</div>
+                        <div class="validator-label-compact">${label !== validator ? label : 'Validator'}</div>
+                        ${dutyCount > 0 ? `<div class="validator-duties-count">${dutyCount} upcoming duties</div>` : ''}
+                    </div>
+                </div>
+            `;
+        }).join('');
+
+        container.innerHTML = html;
+    }
+
+    renderDashboardDuties() {
+        this.renderDashboardProposerDuties();
+        this.renderDashboardAttesterDuties();
+        this.renderDashboardSyncDuties();
+    }
+
+    renderDashboardProposerDuties() {
+        const container = document.getElementById('dashboardProposer');
+        if (!container) return;
+
+        const upcomingDuties = this.duties.proposer
+            .filter(duty => {
+                const timeUntil = this.getTimeUntilSlot(duty.slot);
+                return timeUntil > 0; // Only upcoming duties
+            })
+            .sort((a, b) => a.slot - b.slot)
+            .slice(0, 8); // Show max 8 duties
+
+        if (upcomingDuties.length === 0) {
+            container.innerHTML = '<div style="text-align: center; color: var(--text-secondary); padding: 15px; font-size: 0.85rem;">No upcoming proposer duties</div>';
+            return;
+        }
+
+        const isCompactMode = upcomingDuties.length > 6;
+        
+        const html = upcomingDuties.map(duty => {
+            const timeUntil = this.getTimeUntilSlot(duty.slot);
+            const urgencyClass = this.getUrgencyClass(timeUntil);
+            const validator = this.getValidatorForDuty(duty);
+            const label = this.getValidatorLabel(validator);
+            const color = this.getValidatorColor(validator);
+
+            if (isCompactMode) {
+                return `
+                    <div class="dashboard-duty-item-compact proposer ${urgencyClass}" style="border-color: ${color};">
+                        <div class="duty-validator-mini" style="color: ${color};">${label}</div>
+                        <div class="duty-time-mini">${this.formatTimeUntil(timeUntil)}</div>
+                        <div class="duty-slot-mini">Slot ${duty.slot}</div>
+                    </div>
+                `;
+            } else {
+                return `
+                    <div class="dashboard-duty-item proposer ${urgencyClass}" style="border-color: ${color};">
+                        <div class="duty-header-compact">
+                            <div class="duty-validator-compact" style="color: ${color};">${label}</div>
+                            <div class="duty-time-compact">${this.formatTimeUntil(timeUntil)}</div>
+                        </div>
+                        <div class="duty-details-compact">Slot ${duty.slot}</div>
+                    </div>
+                `;
+            }
+        }).join('');
+
+        container.innerHTML = `<div class="dashboard-duties-container ${isCompactMode ? 'compact-grid' : 'normal-grid'}">${html}</div>`;
+    }
+
+    renderDashboardAttesterDuties() {
+        const container = document.getElementById('dashboardAttester');
+        if (!container) return;
+
+        const upcomingDuties = this.duties.attester
+            .filter(duty => {
+                const timeUntil = this.getTimeUntilSlot(duty.slot);
+                return timeUntil > 0; // Only upcoming duties
+            })
+            .sort((a, b) => a.slot - b.slot)
+            .slice(0, 8); // Show max 8 duties
+
+        if (upcomingDuties.length === 0) {
+            container.innerHTML = '<div style="text-align: center; color: var(--text-secondary); padding: 15px; font-size: 0.85rem;">No upcoming attester duties</div>';
+            return;
+        }
+
+        const isCompactMode = upcomingDuties.length > 6;
+        
+        const html = upcomingDuties.map(duty => {
+            const timeUntil = this.getTimeUntilSlot(duty.slot);
+            const urgencyClass = this.getUrgencyClass(timeUntil);
+            const validator = this.getValidatorForDuty(duty);
+            const label = this.getValidatorLabel(validator);
+            const color = this.getValidatorColor(validator);
+
+            if (isCompactMode) {
+                return `
+                    <div class="dashboard-duty-item-compact ${urgencyClass}" style="border-color: ${color};">
+                        <div class="duty-validator-mini" style="color: ${color};">${label}</div>
+                        <div class="duty-time-mini">${this.formatTimeUntil(timeUntil)}</div>
+                        <div class="duty-slot-mini">Slot ${duty.slot}</div>
+                    </div>
+                `;
+            } else {
+                return `
+                    <div class="dashboard-duty-item ${urgencyClass}" style="border-color: ${color};">
+                        <div class="duty-header-compact">
+                            <div class="duty-validator-compact" style="color: ${color};">${label}</div>
+                            <div class="duty-time-compact">${this.formatTimeUntil(timeUntil)}</div>
+                        </div>
+                        <div class="duty-details-compact">Slot ${duty.slot} • Committee ${duty.committee_index}</div>
+                    </div>
+                `;
+            }
+        }).join('');
+
+        container.innerHTML = `<div class="dashboard-duties-container ${isCompactMode ? 'compact-grid' : 'normal-grid'}">${html}</div>`;
+    }
+
+    renderDashboardSyncDuties() {
+        const container = document.getElementById('dashboardSync');
+        if (!container) return;
+
+        if (this.duties.sync.length === 0) {
+            container.innerHTML = '<div style="text-align: center; color: var(--text-secondary); padding: 15px; font-size: 0.85rem;">No sync committee duties</div>';
+            return;
+        }
+
+        const currentEpoch = Math.floor(this.getCurrentSlotSync() / 32);
+        const isCompactMode = this.duties.sync.length > 6;
+        
+        const html = this.duties.sync.map(duty => {
+            const validator = duty.validator;
+            const label = this.getValidatorLabel(validator);
+            const color = this.getValidatorColor(validator);
+            
+            let timeDisplay = '';
+            let statusClass = '';
+            
+            if (duty.period === 'current') {
+                const remainingEpochs = duty.until_epoch - currentEpoch;
+                timeDisplay = `${remainingEpochs} epochs left`;
+                statusClass = 'current';
+            } else {
+                const epochsUntil = duty.from_epoch - currentEpoch;
+                timeDisplay = `Starts in ${epochsUntil} epochs`;
+                statusClass = 'upcoming';
+            }
+
+            if (isCompactMode) {
+                return `
+                    <div class="dashboard-duty-item-compact ${statusClass}" style="border-color: ${color};">
+                        <div class="duty-validator-mini" style="color: ${color};">${label}</div>
+                        <div class="duty-time-mini">${timeDisplay}</div>
+                        <div class="duty-status-mini">${duty.period === 'current' ? 'Active' : 'Next'}</div>
+                    </div>
+                `;
+            } else {
+                return `
+                    <div class="dashboard-duty-item ${statusClass}" style="border-color: ${color};">
+                        <div class="duty-header-compact">
+                            <div class="duty-validator-compact" style="color: ${color};">${label}</div>
+                            <div class="duty-time-compact">${timeDisplay}</div>
+                        </div>
+                        <div class="duty-details-compact">${duty.period === 'current' ? 'Currently active' : 'Next period'}</div>
+                    </div>
+                `;
+            }
+        }).join('');
+
+        container.innerHTML = `<div class="dashboard-duties-container ${isCompactMode ? 'compact-grid' : 'normal-grid'}">${html}</div>`;
+    }
+
+    renderDashboardPastDuties() {
+        const container = document.getElementById('dashboardPastDuties');
+        if (!container) return;
+
+        const currentSlot = this.getCurrentSlotSync();
+        const allProposers = this.networkOverview?.allProposers || [];
+        const allBlocks = this.networkOverview?.blocks || [];
+        const pastDuties = [];
+
+        // Add recent past block proposals with details
+        const pastBlocks = allProposers
+            .filter(duty => duty.slot < currentSlot)
+            .sort((a, b) => b.slot - a.slot)
+            .slice(0, 15); // Get 15 most recent past blocks
+
+        pastBlocks.forEach(duty => {
+            const isTracked = this.validators.includes(duty.validator_index?.toString());
+            const validator = duty.validator_index?.toString();
+            const label = isTracked ? this.getValidatorLabel(validator) : `Validator ${duty.validator_index}`;
+            
+            // Find block details if available
+            const blockDetail = allBlocks.find(block => block.slot === duty.slot);
+            const graffiti = blockDetail?.graffiti || 'No graffiti';
+            
+            pastDuties.push({
+                type: 'Block Proposal',
+                slot: duty.slot,
+                validator: validator,
+                label: label,
+                isTracked: isTracked,
+                graffiti: graffiti,
+                timeAgo: this.formatTimeAgo(Math.abs(this.getTimeUntilSlot(duty.slot)))
+            });
+        });
+
+        // Add past attester duties from tracked validators
+        this.duties.attester.forEach(duty => {
+            if (duty.slot < currentSlot) {
+                const validator = this.getValidatorForDuty(duty);
+                const label = this.getValidatorLabel(validator);
+                
+                pastDuties.push({
+                    type: 'Attestation',
+                    slot: duty.slot,
+                    validator: validator,
+                    label: label,
+                    isTracked: true,
+                    committee: duty.committee_index,
+                    timeAgo: this.formatTimeAgo(Math.abs(this.getTimeUntilSlot(duty.slot)))
+                });
+            }
+        });
+
+        // Sort by slot (most recent first) and limit to 20
+        pastDuties.sort((a, b) => b.slot - a.slot);
+        const recentPastDuties = pastDuties.slice(0, 20);
+
+        if (recentPastDuties.length === 0) {
+            container.innerHTML = '<div style="text-align: center; color: var(--text-secondary); padding: 15px; font-size: 0.85rem;">No past duties to show</div>';
+            return;
+        }
+
+        const isCompactMode = recentPastDuties.length > 6;
+        
+        const html = recentPastDuties.map(duty => {
+            const color = duty.isTracked ? this.getValidatorColor(duty.validator) : 'var(--text-secondary)';
+            
+            if (isCompactMode) {
+                if (duty.type === 'Block Proposal') {
+                    return `
+                        <div class="dashboard-duty-item-compact past-block" style="background-color: ${color}15; border-color: ${color};">
+                            <div class="past-block-header">
+                                <div class="duty-validator-mini" style="color: ${color};">${duty.label}</div>
+                                <div class="duty-slot-mini" style="color: ${color};">Slot ${duty.slot}</div>
+                            </div>
+                            <div class="past-block-details">
+                                <div class="duty-time-mini">${duty.timeAgo} ago</div>
+                                <div class="duty-graffiti-mini">${duty.graffiti.substring(0, 15)}${duty.graffiti.length > 15 ? '...' : ''}</div>
+                            </div>
+                        </div>
+                    `;
+                } else {
+                    return `
+                        <div class="dashboard-duty-item-compact past-attestation" style="background-color: ${color}15; border-color: ${color};">
+                            <div class="past-block-header">
+                                <div class="duty-validator-mini" style="color: ${color};">${duty.label}</div>
+                                <div class="duty-slot-mini" style="color: ${color};">Attest</div>
+                            </div>
+                            <div class="past-block-details">
+                                <div class="duty-time-mini">${duty.timeAgo} ago</div>
+                                <div class="duty-graffiti-mini">Committee ${duty.committee || 'N/A'}</div>
+                            </div>
+                        </div>
+                    `;
+                }
+            } else {
+                if (duty.type === 'Block Proposal') {
+                    return `
+                        <div class="dashboard-duty-item past-block" style="background-color: ${color}15; border-color: ${color};">
+                            <div class="past-block-header">
+                                <div class="duty-validator-compact" style="color: ${color};">${duty.label}</div>
+                                <div class="duty-slot-compact" style="color: ${color};">Slot ${duty.slot}</div>
+                            </div>
+                            <div class="past-block-details">
+                                <div class="duty-time-compact">${duty.timeAgo} ago</div>
+                                <div class="duty-graffiti-compact">${duty.graffiti}</div>
+                            </div>
+                        </div>
+                    `;
+                } else {
+                    return `
+                        <div class="dashboard-duty-item past-attestation" style="background-color: ${color}15; border-color: ${color};">
+                            <div class="past-block-header">
+                                <div class="duty-validator-compact" style="color: ${color};">${duty.label}</div>
+                                <div class="duty-slot-compact" style="color: ${color};">Attestation</div>
+                            </div>
+                            <div class="past-block-details">
+                                <div class="duty-time-compact">${duty.timeAgo} ago</div>
+                                <div class="duty-graffiti-compact">Committee ${duty.committee || 'N/A'} • Slot ${duty.slot}</div>
+                            </div>
+                        </div>
+                    `;
+                }
+            }
+        }).join('');
+
+        container.innerHTML = `<div class="dashboard-duties-container ${isCompactMode ? 'compact-grid' : 'normal-grid'}">${html}</div>`;
+    }
+
+    renderDashboardNetwork() {
+        // Update network stats
+        this.updateNetworkStats();
+        
+        // Update block stream
+        this.renderBlockStream();
+    }
+    
+    updateNetworkStats() {
+        const currentSlot = this.getCurrentSlotSync();
+        const currentEpoch = Math.floor(currentSlot / 32);
+        
+        // Update slot and epoch
+        const slotElement = document.getElementById('currentSlotNumber');
+        const epochElement = document.getElementById('currentEpochNumber');
+        const blockElement = document.getElementById('currentBlockNumber');
+        
+        if (slotElement) slotElement.textContent = currentSlot.toLocaleString();
+        if (epochElement) epochElement.textContent = currentEpoch.toLocaleString();
+        
+        // Calculate approximate block number (rough estimation)
+        const blockNumber = currentSlot + 15537394;
+        if (blockElement) blockElement.textContent = blockNumber.toLocaleString();
+        
+        
+        // Fetch gas price (placeholder for now - beacon API doesn't provide gas price directly)
+        // We'll add a simple gas price display
+        this.fetchGasPrice();
+    }
+    
+    
+    async fetchGasPrice() {
+        // For now, just show a placeholder since beacon API doesn't provide gas price
+        // In production, you'd fetch from execution layer or external API
+        const gasElement = document.getElementById('currentGasPrice');
+        if (gasElement) {
+            gasElement.textContent = '~15 gwei'; // Placeholder
+        }
+    }
+
+    renderBlockStream() {
+        const container = document.getElementById('blockStream');
+        if (!container) return;
+
+        // Get network data from proposer duties
+        const currentSlot = this.getCurrentSlotSync();
+        const allProposers = this.networkOverview?.allProposers || [];
+        
+        // Get blocks around current slot (2 before, 1 current, 10 after for current block to be 3rd from top)
+        const relevantBlocks = allProposers
+            .filter(duty => duty.slot >= currentSlot - 2 && duty.slot <= currentSlot + 10)
+            .sort((a, b) => a.slot - b.slot);
+
+        if (relevantBlocks.length === 0) {
+            container.innerHTML = '<div style="text-align: center; color: var(--text-secondary); padding: 15px; font-size: 0.85rem;">No block data available</div>';
+            return;
+        }
+
+        const html = relevantBlocks.map((duty) => {
+            const isTracked = this.validators.includes(duty.validator_index?.toString());
+            const isCurrent = duty.slot === currentSlot;
+            const isPast = duty.slot < currentSlot;
+            const timeUntil = this.getTimeUntilSlot(duty.slot);
+            
+            let statusClass = '';
+            let statusDot = '';
+            
+            if (isCurrent) {
+                statusClass = 'current center-block';
+                statusDot = '<div class="block-status current-pulse"></div>';
+                
+                // Add shiver animation in last 2 seconds (when time until is negative but close to 0)
+                const secondsUntil = timeUntil / 1000;
+                if (secondsUntil > -2 && secondsUntil <= 0) {
+                    statusClass += ' shiver-confirming';
+                }
+            } else if (isPast) {
+                statusClass = 'past';
+                statusDot = '<div class="block-status confirmed"></div>';
+            } else {
+                statusClass = 'future';
+                statusDot = '<div class="block-status upcoming"></div>';
+            }
+            
+            if (isTracked) {
+                statusClass += ' tracked';
+            }
+
+            const proposerDisplay = duty.validator_index || 'Unknown';
+            const proposerLabel = isTracked ? this.getValidatorLabel(duty.validator_index?.toString()) : duty.validator_index;
+            const timeDisplay = isPast ? 
+                this.formatTimeAgo(Math.abs(timeUntil)) + ' ago' : 
+                (isCurrent ? 'Now' : this.formatTimeUntil(timeUntil));
+
+            return `
+                <div class="block-item ${statusClass}" style="--block-color: ${isTracked ? this.getValidatorColor(duty.validator_index?.toString()) : 'transparent'}">
+                    ${statusDot}
+                    <div class="block-header">
+                        <div class="block-slot">Slot ${duty.slot}</div>
+                        <div class="block-time">${timeDisplay}</div>
+                    </div>
+                    <div class="block-proposer">
+                        <span style="color: ${isTracked ? this.getValidatorColor(duty.validator_index?.toString()) : 'var(--text-secondary)'}; font-weight: ${isTracked ? '700' : '500'};">
+                            ${isTracked ? proposerLabel + ' 👑' : proposerDisplay}
+                        </span>
+                    </div>
+                </div>
+            `;
+        }).join('');
+
+        // Add smooth transition animation
+        const currentBlocks = container.querySelectorAll('.block-item');
+        const newContainer = document.createElement('div');
+        newContainer.innerHTML = html;
+        
+        // Check if current block has changed for animation
+        const oldCurrentBlock = container.querySelector('.center-block');
+        const newCurrentBlock = newContainer.querySelector('.center-block');
+        const hasCurrentBlockChanged = !oldCurrentBlock || 
+            (oldCurrentBlock && newCurrentBlock && 
+             oldCurrentBlock.querySelector('.block-slot').textContent !== newCurrentBlock.querySelector('.block-slot').textContent);
+        
+        if (hasCurrentBlockChanged && currentBlocks.length > 0) {
+            // Animate transition to new block
+            container.style.transform = 'translateY(-10px)';
+            container.style.opacity = '0.7';
+            
+            setTimeout(() => {
+                container.innerHTML = html;
+                container.style.transform = 'translateY(0)';
+                container.style.opacity = '1';
+                
+                // Highlight new current block
+                const newCurrentElement = container.querySelector('.center-block');
+                if (newCurrentElement) {
+                    newCurrentElement.classList.add('new-block-animation');
+                    setTimeout(() => {
+                        newCurrentElement.classList.remove('new-block-animation');
+                    }, 1000);
+                }
+            }, 200);
+        } else {
+            container.innerHTML = html;
+        }
+    }
+
+    updateCurrentSlotEpoch() {
+        const currentSlot = this.getCurrentSlotSync();
+        const currentEpoch = Math.floor(currentSlot / 32);
+        const currentBlock = currentSlot + 15537394; // Approximate block number calculation
+        
+        const slotElement = document.getElementById('currentSlotNumber');
+        const epochElement = document.getElementById('currentEpochNumber');
+        const blockElement = document.getElementById('currentBlockNumber');
+        
+        if (slotElement) slotElement.textContent = currentSlot.toLocaleString();
+        if (epochElement) epochElement.textContent = currentEpoch.toLocaleString();
+        if (blockElement) blockElement.textContent = currentBlock.toLocaleString();
+    }
 }
 
 const app = new ValidatorDutiesTracker();
@@ -2758,4 +3377,5 @@ window.addEventListener('beforeunload', () => {
     if (app.autoRefreshInterval) clearInterval(app.autoRefreshInterval);
     if (app.notificationCheckInterval) clearInterval(app.notificationCheckInterval);
     if (app.countdownInterval) clearInterval(app.countdownInterval);
+    if (app.dashboardUpdateInterval) clearInterval(app.dashboardUpdateInterval);
 });

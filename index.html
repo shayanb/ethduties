@@ -179,16 +179,98 @@
         </section>
         </div>
 
+        <!-- Dashboard Mode Page -->
+        <div id="dashboardPage" class="page dashboard-mode">
+            <div class="dashboard-header">
+                <h1 class="dashboard-title">⚡ ETH Duties Tracker</h1>
+                <div id="dashboardLoadingIndicator" class="dashboard-loading-indicator-top">
+                    <div class="loading-circle"></div>
+                </div>
+                <button id="dashboardExitBtn" class="dashboard-exit-btn" title="Exit Dashboard Mode (ESC)">✕</button>
+            </div>
+            <div class="dashboard-container">
+                <!-- Left Column: Validators -->
+                <div class="dashboard-left">
+                    <div class="dashboard-section">
+                        <h3 class="section-title">👥 My Validators</h3>
+                        <div id="dashboardValidators" class="dashboard-validators"></div>
+                    </div>
+                </div>
+
+                <!-- Middle Column: Duties -->
+                <div class="dashboard-middle">
+                    <div class="duties-grid">
+                        <div class="dashboard-section">
+                            <h3 class="section-title">💰 Proposer Duties</h3>
+                            <div id="dashboardProposer" class="dashboard-duties-spaced"></div>
+                        </div>
+                        <div class="dashboard-section">
+                            <h3 class="section-title">📝 Attester Duties</h3>
+                            <div id="dashboardAttester" class="dashboard-duties-spaced"></div>
+                        </div>
+                        <div class="dashboard-section">
+                            <h3 class="section-title">💎 Sync Committee</h3>
+                            <div id="dashboardSync" class="dashboard-duties-spaced"></div>
+                        </div>
+                    </div>
+                    <div class="dashboard-section past-duties-section">
+                        <h3 class="section-title">🕒 Recent Past Duties</h3>
+                        <div id="dashboardPastDuties" class="dashboard-past-duties-spaced"></div>
+                    </div>
+                </div>
+
+                <!-- Right Column: Network State -->
+                <div class="dashboard-right">
+                    <div class="dashboard-section">
+                        <h3 class="section-title">🌐 Network State</h3>
+                        <div id="dashboardNetwork" class="dashboard-network">
+                            <div class="network-stats">
+                                <div class="stat-item">
+                                    <span class="stat-label">Slot</span>
+                                    <span id="currentSlotNumber" class="stat-value">---</span>
+                                </div>
+                                <div class="stat-item">
+                                    <span class="stat-label">Block</span>
+                                    <span id="currentBlockNumber" class="stat-value">---</span>
+                                </div>
+                                <div class="stat-item">
+                                    <span class="stat-label">Epoch</span>
+                                    <span id="currentEpochNumber" class="stat-value">---</span>
+                                </div>
+                                <div class="stat-item">
+                                    <span class="stat-label">Gas</span>
+                                    <span id="currentGasPrice" class="stat-value">---</span>
+                                </div>
+                            </div>
+                            <div class="block-stream">
+                                <div class="stream-header">Block Stream</div>
+                                <div id="blockStream" class="block-items-flow"></div>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+
         <footer>
-            <p>
-                Data cached in session storage | 
-                Inspired by <a href="https://github.com/TobiWo/eth-duties" target="_blank">eth-duties</a>
-            </p>
-            <p>
-                <a href="https://x.com/sbetamc" target="_blank">@sbetamc</a> | 
-                <a href="https://github.com/shayanb" target="_blank">github.com/shayanb</a> | 
-                <a href="https://github.com/shayanb/ethduties" target="_blank">v1.0.0</a>
-            </p>
+            <div class="footer-content">
+                <div class="footer-info">
+                    <p>
+                        Data cached in session storage | 
+                        Inspired by <a href="https://github.com/TobiWo/eth-duties" target="_blank">eth-duties</a>
+                    </p>
+                    <p>
+                        <a href="https://x.com/sbetamc" target="_blank">@sbetamc</a> | 
+                        <a href="https://github.com/shayanb" target="_blank">github.com/shayanb</a> | 
+                        <a href="https://github.com/shayanb/ethduties" target="_blank">v1.0.0</a>
+                    </p>
+                </div>
+                <div class="footer-controls">
+                    <button id="dashboardModeToggle" class="dashboard-toggle">
+                        📊 Dashboard Mode
+                    </button>
+                </div>
+            </div>
         </footer>
     </div>
 
