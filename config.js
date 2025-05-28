@@ -1,14 +1,18 @@
 // Configuration for deployment
-// Update this file with your deployed server URL
+// This will automatically use the correct server URL based on where it's accessed from
 window.APP_CONFIG = {
-    // For local development
-    serverUrl: 'http://localhost:3000',
-    
-    // For production (update with your actual server URL)
-    // serverUrl: 'https://ethduties.vercel.app',
-    
-    // Or use environment-based configuration
-    // serverUrl: window.location.hostname === 'localhost' 
-    //     ? 'http://localhost:3000' 
-    //     : 'https://ethduties.vercel.app'
+    // Automatically detect and use the appropriate server URL
+    serverUrl: (() => {
+        const hostname = window.location.hostname;
+        const protocol = window.location.protocol;
+        
+        // For localhost development
+        if (hostname === 'localhost' || hostname === '127.0.0.1') {
+            return 'http://localhost:3000';
+        }
+        
+        // For production deployment - uses same host with port 3000
+        // If using HTTPS, make sure your server supports it
+        return `${protocol}//${hostname}:3000`;
+    })()
 };
