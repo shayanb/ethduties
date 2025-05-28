@@ -5,10 +5,8 @@ class ValidatorDutiesTracker {
         this.serverUrl = window.APP_CONFIG?.serverUrl || 'http://localhost:3000';
         this.publicBeaconUrls = [
             { name: 'PublicNode', url: 'https://ethereum-beacon-api.publicnode.com' },
-            { name: 'Ankr', url: 'https://rpc.ankr.com/eth_beacon' },
-            { name: 'ChainSafe', url: 'https://lodestar-mainnet.chainsafe.io' },
-            { name: 'Nether', url: 'https://beacon.nether.ws' },
-            { name: 'QuickNode', url: 'https://nd-123-456-789.p2pify.com/beacon' }
+            { name: 'dRPC', url: 'https://eth-beacon-chain.drpc.org/rest' },
+            { name: 'QuickNode', url: 'https://docs-demo.quiknode.pro' },
         ];
         this.autoRefreshInterval = null;
         this.notificationCheckInterval = null;
