@@ -1384,7 +1384,7 @@ class ValidatorDutiesTracker {
             if (validatorStatus.includes('active')) {
                 statusIcon = '<span class="status-icon active" title="Active">✓</span>';
             } else if (validatorStatus.includes('exited') || validatorStatus === 'withdrawal_possible' || validatorStatus === 'withdrawal_done') {
-                statusIcon = '<span class="status-icon exited" title="Exited">⚠️</span>';
+                statusIcon = '<span class="status-icon exited" title="Exited">❌ Exited</span>';
             } else if (validatorStatus === 'pending') {
                 statusIcon = '<span class="status-icon pending" title="Pending">⏳</span>';
             } else {
@@ -1481,17 +1481,20 @@ class ValidatorDutiesTracker {
     }
     
     getValidatorLabel(validator) {
+        // Extract ID if validator is an object
+        const validatorId = validator.id || validator;
+        
         // Check if we have a custom label for this validator
-        const customLabel = this.getValidatorCustomLabel(validator);
+        const customLabel = this.getValidatorCustomLabel(validatorId);
         if (customLabel) {
             return customLabel;
         }
         
         // Otherwise use default formatting
-        if (validator.startsWith('0x')) {
-            return this.truncateAddress(validator);
+        if (validatorId.startsWith && validatorId.startsWith('0x')) {
+            return this.truncateAddress(validatorId);
         }
-        return validator; // Return index without "#"
+        return validatorId.toString(); // Return index without "#"
     }
     
     getValidatorCustomLabel(validator) {
@@ -1616,11 +1619,17 @@ class ValidatorDutiesTracker {
             
             const data = await response.json();
             
-            if (!data.data || !data.data.header || !data.data.header.message) {
-                throw new Error('Invalid response format');
+            // Handle different response formats
+            if (data.data) {
+                if (data.data.header && data.data.header.message && data.data.header.message.slot) {
+                    return parseInt(data.data.header.message.slot);
+                } else if (data.data.slot) {
+                    return parseInt(data.data.slot);
+                }
             }
             
-            return parseInt(data.data.header.message.slot);
+            console.error('Unexpected getCurrentSlot response format:', data);
+            throw new Error('Invalid response format');
         } catch (error) {
             console.error('getCurrentSlot error:', error);
             throw new Error(`Failed to get current slot: ${error.message}`);
@@ -1901,9 +1910,6 @@ class ValidatorDutiesTracker {
             const currentSyncUrl = `${this.serverUrl}/api/beacon/eth/v1/beacon/states/head/sync_committees`;
             const nextSyncUrl = `${this.serverUrl}/api/beacon/eth/v1/beacon/states/head/sync_committees?epoch=${nextSyncPeriodFirstEpoch}`;
             
-            console.log('Current sync committee URL:', currentSyncUrl);
-            console.log('Next sync committee URL:', nextSyncUrl);
-            console.log('Current epoch:', currentEpoch, 'Next period first epoch:', nextSyncPeriodFirstEpoch);
             
             // Fetch current sync committee
             const currentSyncResponse = await fetch(currentSyncUrl, {
