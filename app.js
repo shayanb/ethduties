@@ -1410,6 +1410,7 @@ class ValidatorDutiesTracker {
             // Since we now always store indices, all validators should be indices
             let indexDisplay = `<a href="https://beaconcha.in/validator/${validatorId}" target="_blank" class="validator-index-link" title="Click to view on Beaconcha.in">
                 <span class="validator-label-display">${displayLabel}</span>
+                <input type="text" class="validator-label-edit" style="display: none;" value="${displayLabel}" onblur="app.saveValidatorLabel('${validatorId}', this.value)" onkeypress="if(event.key==='Enter') this.blur()" onclick="event.stopPropagation();">
             </a>`;
             let pubkeyPreview = `<span class="validator-pubkey-preview">Loading...</span>`;
             
