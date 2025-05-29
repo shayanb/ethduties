@@ -3321,8 +3321,8 @@ class ValidatorDutiesTracker {
             return `
                 <div class="dashboard-validator-item ${dutyCount > 0 ? 'has-duties' : ''}" style="border-left-color: ${color}">
                     <div class="validator-info-compact">
-                        <div class="validator-index-compact">${validator}</div>
-                        <div class="validator-label-compact">${label !== validator ? label : 'Validator'}</div>
+                        <div class="validator-index-compact">${validator.id || validator}</div>
+                        <div class="validator-label-compact">${label !== (validator.id || validator) ? label : 'Validator'}</div>
                         ${dutyCount > 0 ? `<div class="validator-duties-count">${dutyCount} upcoming duties</div>` : ''}
                     </div>
                 </div>
