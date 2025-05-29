@@ -11,8 +11,8 @@ window.APP_CONFIG = {
             return 'http://localhost:3000';
         }
         
-        // For production deployment - uses same host with port 3000
-        // If using HTTPS, make sure your server supports it
-        return `${protocol}//${hostname}:3000`;
+        // For production deployment - uses same host without port
+        // Traefik handles the routing to the backend
+        return `${protocol}//${hostname}`;
     })()
 };
