@@ -48,11 +48,11 @@ services:
       # Traefik labels for reverse proxy
       - "traefik.enable=true"
       # HTTP router for redirect
-      - "traefik.http.routers.ethduties-http.rule=Host(`ethduties.com`) || Host(`ethduti.es`) || Host(`www.ethduties.com`) || Host(`www.ethduti.es`)"
+      - "traefik.http.routers.ethduties-http.rule=Host(`ethduties.com`) || Host(`ethduti.es`)"
       - "traefik.http.routers.ethduties-http.entrypoints=web"
       - "traefik.http.routers.ethduties-http.middlewares=redirect-to-https"
       # HTTPS router
-      - "traefik.http.routers.ethduties.rule=Host(`ethduties.com`) || Host(`ethduti.es`) || Host(`www.ethduties.com`) || Host(`www.ethduti.es`)"
+      - "traefik.http.routers.ethduties.rule=Host(`ethduties.com`) || Host(`ethduti.es`)"
       - "traefik.http.routers.ethduties.entrypoints=websecure"
       - "traefik.http.routers.ethduties.tls=true"
       - "traefik.http.routers.ethduties.tls.certresolver=letsencrypt"
