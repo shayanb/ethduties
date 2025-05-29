@@ -2451,8 +2451,14 @@ footer {
 .status-icon {
     display: inline-block;
     font-size: 0.9rem;
-    margin-right: 6px;
+    margin-left: 8px;
     vertical-align: middle;
+}
+
+.validator-main-info {
+    display: flex;
+    align-items: center;
+    gap: 6px;
 }
 
 .status-icon.active {
@@ -2460,7 +2466,8 @@ footer {
 }
 
 .status-icon.exited {
-    color: var(--warning-color);
+    color: var(--error-color);
+    text-shadow: #ffffff 0 0 2px, #f40707 0 0 4px;
 }
 
 .status-icon.pending {
@@ -2484,7 +2491,6 @@ footer {
 }
 
 .validator-item-compact.validator-exited .validator-info {
-    text-decoration: line-through;
     opacity: 0.7;
 }
 

@@ -1392,12 +1392,8 @@ class ValidatorDutiesTracker {
             }
             
             // Since we now always store indices, all validators should be indices
-            let indexDisplay = `<a href="https://beaconcha.in/validator/${validatorId}" target="_blank" class="validator-index-link" ondblclick="app.editValidatorLabel('${validatorId}', event); return false;" title="Click to view on Beaconcha.in • Double-click to edit label">
+            let indexDisplay = `<a href="https://beaconcha.in/validator/${validatorId}" target="_blank" class="validator-index-link" title="Click to view on Beaconcha.in">
                 <span class="validator-label-display">${displayLabel}</span>
-                <input type="text" class="validator-label-edit" style="display:none" value="${customLabel || ''}" 
-                       onblur="app.saveValidatorLabel('${validatorId}', this.value)"
-                       onkeydown="if(event.key === 'Enter') { app.saveValidatorLabel('${validatorId}', this.value); event.preventDefault(); }"
-                       onclick="event.preventDefault(); event.stopPropagation();">
             </a>`;
             let pubkeyPreview = `<span class="validator-pubkey-preview">Loading...</span>`;
             
@@ -1434,8 +1430,10 @@ class ValidatorDutiesTracker {
             validatorItem.innerHTML = `
                 <div class="validator-badge-compact ${validatorStatus.includes('exited') ? 'validator-exited' : ''}" style="background-color: ${color}">
                     <div class="validator-info">
-                        ${statusIcon}
-                        ${indexDisplay}
+                        <div class="validator-main-info">
+                            ${indexDisplay}
+                            ${statusIcon}
+                        </div>
                         ${pubkeyPreview}
                     </div>
                     <button class="remove-validator-compact" onclick="app.confirmRemoveValidator('${validatorId}')" title="Remove validator">×</button>
@@ -1619,6 +1617,12 @@ class ValidatorDutiesTracker {
             
             const data = await response.json();
             
+            // Check for error responses
+            if (data.code && data.message) {
+                // This is an error response (e.g., rate limiting)
+                throw new Error(data.message);
+            }
+            
             // Handle different response formats
             if (data.data) {
                 if (data.data.header && data.data.header.message && data.data.header.message.slot) {
@@ -1791,6 +1795,10 @@ class ValidatorDutiesTracker {
             
         } catch (error) {
             console.error('Error checking missed attestations:', error);
+            // Only show rate limit and connection errors to user
+            if (error.message.includes('request limit') || error.message.includes('rate limit')) {
+                this.showError(`Rate limit reached: ${error.message}`);
+            }
         }
     }
     
@@ -1822,16 +1830,49 @@ class ValidatorDutiesTracker {
         const customLabel = this.getValidatorCustomLabel(validatorId);
         const validatorDisplay = customLabel || validatorId;
         
-        await this.sendNotification(
-            'Missed Attestation',
-            validatorId,
-            validatorDisplay,
-            {
-                slot: slot,
-                timeUntil: 'Attestation was missed'
-            },
-            'high'
-        );
+        // Send Telegram notification if enabled
+        const telegramEnabled = sessionStorage.getItem('telegramEnabled') === 'true';
+        const telegramChatId = sessionStorage.getItem('telegramChatId');
+        
+        if (telegramEnabled && telegramChatId) {
+            try {
+                const message = `⚠️ MISSED ATTESTATION\n\nValidator: [${validatorDisplay}](https://beaconcha.in/validator/${validatorId})\nSlot: [${slot}](https://beaconcha.in/slot/${slot})\n\nThe validator missed its attestation duty.`;
+                
+                await fetch(`${this.serverUrl}/api/notify/telegram`, {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ 
+                        chatId: telegramChatId, 
+                        message 
+                    })
+                });
+            } catch (error) {
+                console.error('Telegram notification error:', error);
+            }
+        }
+        
+        // Send browser notification if enabled
+        const browserEnabled = sessionStorage.getItem('browserNotifications') === 'true';
+        if (browserEnabled && this.pushSubscription) {
+            try {
+                await fetch(`${this.serverUrl}/api/notify`, {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({
+                        type: 'Missed Attestation',
+                        validator: validatorId,
+                        validatorDisplay,
+                        duty: {
+                            slot: slot,
+                            timeUntil: 'Attestation was missed'
+                        },
+                        urgency: 'high'
+                    })
+                });
+            } catch (error) {
+                console.error('Browser notification error:', error);
+            }
+        }
     }
 
     async fetchSyncCommitteeDuties(epoch) {
