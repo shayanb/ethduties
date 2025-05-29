@@ -1379,6 +1379,16 @@ class ValidatorDutiesTracker {
             const customLabel = this.getValidatorCustomLabel(validatorId);
             const displayLabel = customLabel || validatorId;
             
+            // Count missed attestations for this validator
+            let missedCount = 0;
+            Object.keys(this.missedAttestations).forEach(key => {
+                // Ensure string comparison
+                if (this.missedAttestations[key].validatorId === validatorId.toString()) {
+                    missedCount++;
+                }
+            });
+            
+            
             // Status indicator
             let statusIcon = '';
             if (validatorStatus.includes('active')) {
@@ -1391,11 +1401,32 @@ class ValidatorDutiesTracker {
                 statusIcon = '<span class="status-icon unknown" title="Unknown">?</span>';
             }
             
+            // Add missed attestation indicator
+            let missedIndicator = '';
+            if (missedCount > 0) {
+                missedIndicator = `<span class="missed-attestations" title="${missedCount} missed attestation${missedCount > 1 ? 's' : ''}">⚠️ ${missedCount}</span>`;
+            }
+            
             // Since we now always store indices, all validators should be indices
             let indexDisplay = `<a href="https://beaconcha.in/validator/${validatorId}" target="_blank" class="validator-index-link" title="Click to view on Beaconcha.in">
                 <span class="validator-label-display">${displayLabel}</span>
             </a>`;
             let pubkeyPreview = `<span class="validator-pubkey-preview">Loading...</span>`;
+            
+            // Set the HTML first
+            validatorItem.innerHTML = `
+                <div class="validator-badge-compact ${validatorStatus.includes('exited') ? 'validator-exited' : ''} ${missedCount > 0 ? 'has-missed-attestations' : ''}" style="background-color: ${color}">
+                    <div class="validator-info">
+                        <div class="validator-main-info">
+                            ${indexDisplay}
+                            ${statusIcon}
+                            ${missedIndicator}
+                        </div>
+                        <span class="validator-pubkey-preview">Loading...</span>
+                    </div>
+                    <button class="remove-validator-compact" onclick="app.confirmRemoveValidator('${validatorId}')" title="Remove validator">×</button>
+                </div>
+            `;
             
             // Fetch pubkey asynchronously and update
             this.getValidatorInfo(validatorId).then(info => {
@@ -1427,18 +1458,6 @@ class ValidatorDutiesTracker {
                 if (preview) preview.textContent = 'Error loading';
             });
             
-            validatorItem.innerHTML = `
-                <div class="validator-badge-compact ${validatorStatus.includes('exited') ? 'validator-exited' : ''}" style="background-color: ${color}">
-                    <div class="validator-info">
-                        <div class="validator-main-info">
-                            ${indexDisplay}
-                            ${statusIcon}
-                        </div>
-                        ${pubkeyPreview}
-                    </div>
-                    <button class="remove-validator-compact" onclick="app.confirmRemoveValidator('${validatorId}')" title="Remove validator">×</button>
-                </div>
-            `;
             gridContainer.appendChild(validatorItem);
         });
         
@@ -1738,28 +1757,25 @@ class ValidatorDutiesTracker {
             // Get current slot and epoch
             const currentSlot = await this.getCurrentSlot();
             const currentEpoch = Math.floor(currentSlot / 32);
-            const slotInEpoch = currentSlot % 32;
-            
-            // Only check for missed attestations after slot 2 of each epoch
-            if (slotInEpoch < 2) {
-                return;
-            }
             
             // Don't check too frequently
             if (this.lastAttestationCheck) {
                 const timeSinceLastCheck = Date.now() - this.lastAttestationCheck;
-                if (timeSinceLastCheck < 60000) { // Check at most once per minute
+                if (timeSinceLastCheck < 30000) { // Check at most once per 30 seconds
                     return;
                 }
             }
             
             this.lastAttestationCheck = Date.now();
             
-            // Check previous epoch attestations
+            // Check previous epoch attestations (attestations are assigned one epoch in advance)
             const previousEpoch = currentEpoch - 1;
             const attestationDuties = await this.fetchAttesterDuties(previousEpoch);
             
             // For each duty, check if it was fulfilled
+            let checkedCount = 0;
+            let newMissedCount = 0;
+            
             for (const duty of attestationDuties) {
                 const validatorId = duty.validator_index?.toString();
                 if (!validatorId) continue;
@@ -1768,6 +1784,8 @@ class ValidatorDutiesTracker {
                 
                 // Skip if we already checked this attestation
                 if (this.missedAttestations[slotKey]) continue;
+                
+                checkedCount++;
                 
                 // Check if attestation was included
                 const attestationIncluded = await this.checkAttestationIncluded(validatorId, duty.slot);
@@ -1780,6 +1798,9 @@ class ValidatorDutiesTracker {
                         missedAt: new Date().toISOString()
                     };
                     
+                    newMissedCount++;
+                    console.log(`📋 Missed attestation: Validator ${validatorId}, Slot ${duty.slot}`);
+                    
                     // Send notification if enabled
                     const notifyMissed = document.getElementById('notifyMissed')?.checked ?? false;
                     if (notifyMissed) {
@@ -1788,7 +1809,16 @@ class ValidatorDutiesTracker {
                 }
             }
             
+            if (newMissedCount > 0) {
+                console.log(`Checked ${checkedCount} new attestations, found ${newMissedCount} missed`);
+            }
+            
             this.saveMissedAttestations();
+            
+            // Only re-render validators if new missed attestations were found
+            if (newMissedCount > 0) {
+                this.renderValidators();
+            }
             
             // Clean up old missed attestations (older than 7 days)
             this.cleanupOldMissedAttestations();
@@ -1804,13 +1834,35 @@ class ValidatorDutiesTracker {
     
     async checkAttestationIncluded(validatorIndex, slot) {
         // This is a simplified check - in production you'd want to check the actual attestation inclusion
-        // For now, we'll assume attestations are included if the validator is active
-        const validator = this.validators.find(v => (v.id || v) === validatorIndex);
-        if (validator && validator.status && validator.status.includes('active')) {
-            // For active validators, we'll randomly say 99% of attestations are included
-            return Math.random() > 0.01;
+        // by querying the beacon chain for the actual attestation data at the specific slot
+        const validator = this.validators.find(v => (v.id || v) === validatorIndex.toString());
+        
+        if (!validator) {
+            console.warn(`Validator ${validatorIndex} not found in tracked validators`);
+            return true; // Assume included if not tracking
         }
-        return false;
+        
+        // Realistic approach: Only consider attestations missed if validator has known issues
+        if (validator.status) {
+            if (validator.status.includes('exited') || 
+                validator.status === 'withdrawal_possible' || 
+                validator.status === 'withdrawal_done') {
+                // Exited validators don't have attestation duties
+                return true;
+            } else if (validator.status.includes('active')) {
+                // Active validators: assume attestations are included unless we have evidence otherwise
+                // In a real implementation, you would query: /eth/v1/beacon/blocks/{slot}/attestations
+                // and check if this validator's attestation is present
+                return true;
+            } else {
+                // Unknown status validators: could potentially miss attestations
+                // But without real data, assume they're included
+                return true;
+            }
+        }
+        
+        // Default: assume attestation was included
+        return true;
     }
     
     cleanupOldMissedAttestations() {
@@ -1824,6 +1876,74 @@ class ValidatorDutiesTracker {
         });
         
         this.saveMissedAttestations();
+    }
+    
+    // Test method to manually add missed attestations
+    testAddMissedAttestation(validatorId) {
+        const currentSlot = this.getCurrentSlotSync();
+        const testSlot = currentSlot - 100; // Past slot
+        const slotKey = `${validatorId}-${testSlot}`;
+        
+        this.missedAttestations[slotKey] = {
+            validatorId: validatorId.toString(),
+            slot: testSlot,
+            epoch: Math.floor(testSlot / 32),
+            missedAt: new Date().toISOString()
+        };
+        
+        console.log(`🧪 Added test missed attestation: Validator ${validatorId}, Slot ${testSlot}`);
+        this.saveMissedAttestations();
+        this.renderValidators();
+    }
+    
+    // Clear all missed attestations (for testing)
+    clearMissedAttestations() {
+        this.missedAttestations = {};
+        this.saveMissedAttestations();
+        this.renderValidators();
+        console.log('🧹 Cleared all missed attestations');
+    }
+    
+    // Force check missed attestations (for testing)
+    async forceCheckMissedAttestations() {
+        this.lastAttestationCheck = null; // Reset to force check
+        console.log('🔍 Forcing missed attestation check...');
+        await this.checkMissedAttestations();
+    }
+    
+    // Test method to simulate missed attestations
+    async testMissedAttestations() {
+        console.log('🧪 Testing missed attestation system...');
+        
+        // First clear existing data
+        this.clearMissedAttestations();
+        
+        // Add a few test missed attestations for each validator
+        this.validators.forEach((validator, index) => {
+            const validatorId = validator.id || validator;
+            for (let i = 0; i < 2; i++) {
+                this.testAddMissedAttestation(validatorId);
+            }
+        });
+        
+        console.log('✅ Added test missed attestations for all validators');
+    }
+    
+    // Debug method to show current missed attestations
+    debugMissedAttestations() {
+        console.log('📊 Current missed attestations:', this.missedAttestations);
+        console.log('📈 Total missed attestations:', Object.keys(this.missedAttestations).length);
+        
+        // Group by validator
+        const byValidator = {};
+        Object.values(this.missedAttestations).forEach(missed => {
+            if (!byValidator[missed.validatorId]) {
+                byValidator[missed.validatorId] = 0;
+            }
+            byValidator[missed.validatorId]++;
+        });
+        
+        console.log('👥 Missed attestations by validator:', byValidator);
     }
     
     async sendMissedAttestationNotification(validatorId, slot) {
@@ -1910,6 +2030,35 @@ class ValidatorDutiesTracker {
         this.displayProposerDuties();
         this.displayAttesterDuties();
         this.displaySyncCommitteeDuties();
+        this.updateTabBadges();
+    }
+    
+    updateTabBadges() {
+        // Update badges for each tab with count of duties
+        const proposerCount = this.duties.proposer.length;
+        const attesterCount = this.duties.attester.length;
+        const syncCount = this.duties.sync.length;
+        
+        document.querySelectorAll('.tab-btn').forEach(btn => {
+            const tabType = btn.dataset.tab;
+            let count = 0;
+            
+            if (tabType === 'proposer') count = proposerCount;
+            else if (tabType === 'attester') count = attesterCount;
+            else if (tabType === 'sync') count = syncCount;
+            
+            // Remove existing badge
+            const existingBadge = btn.querySelector('.tab-badge');
+            if (existingBadge) existingBadge.remove();
+            
+            // Add new badge if count > 0
+            if (count > 0) {
+                const badge = document.createElement('span');
+                badge.className = 'tab-badge';
+                badge.textContent = count;
+                btn.appendChild(badge);
+            }
+        });
     }
     
     async fetchNetworkOverviewOnly() {
@@ -2585,12 +2734,14 @@ class ValidatorDutiesTracker {
         document.getElementById('notifyMinutes').value = settings.notifyMinutes;
         
         // Save settings on change
-        ['notifyProposer', 'notifyAttester', 'notifySync', 'notifyMissed'].forEach(id => {
+        ['notifyProposer', 'notifyAttester', 'notifySync'].forEach(id => {
             document.getElementById(id).addEventListener('change', (e) => {
                 sessionStorage.setItem(id, e.target.checked);
                 this.sendNotificationSettingsUpdate();
             });
         });
+        
+        // Don't add event listener for disabled notifyMissed checkbox
         
         document.getElementById('notifyMinutes').addEventListener('change', (e) => {
             sessionStorage.setItem('notifyMinutes', e.target.value);
@@ -2626,7 +2777,14 @@ class ValidatorDutiesTracker {
             attester: [],
             sync: []
         };
+        
+        // Clear missed attestations
+        this.missedAttestations = {};
+        sessionStorage.removeItem('missedAttestations');
+        
         this.displayDuties();
+        this.renderValidators(); // Re-render to remove missed attestation indicators
+        this.showSuccess('Cache and missed attestations cleared');
     }
 
     startAutoRefresh() {

@@ -1,13 +1,11 @@
 {
   "name": "eth-duties-tracker",
-  "version": "1.0.0",
+  "version": "1.2.1",
   "description": "Ethereum Validator Duties Tracker with notifications",
   "main": "server.js",
   "scripts": {
     "start": "node server.js",
-    "dev": "nodemon server.js",
-    "build": "echo 'No build step required'",
-    "deploy": "vercel --prod"
+    "dev": "nodemon server.js"
   },
   "engines": {
     "node": "18.x"

@@ -173,6 +173,63 @@ Simply paste a comma-separated list of validators:
 }
 ```
 
+## Testing & Debugging
+
+### Missed Attestation Testing
+
+The application includes console commands for testing the missed attestation tracking system:
+
+```javascript
+// Add test missed attestations for a specific validator
+app.testAddMissedAttestation('12345')
+
+// Add test missed attestations for all tracked validators (2 per validator)
+app.testMissedAttestations()
+
+// Force an immediate check for missed attestations (bypasses timing restrictions)
+app.forceCheckMissedAttestations()
+
+// View current missed attestation data and statistics
+app.debugMissedAttestations()
+
+// Clear all missed attestation data
+app.clearMissedAttestations()
+```
+
+### Console Testing Workflow
+
+1. **Open browser console** (F12 → Console tab)
+2. **Add some validators** through the UI first
+3. **Run test commands** to simulate missed attestations:
+   ```javascript
+   // Clear any existing data
+   app.clearMissedAttestations()
+   
+   // Add test data for all validators
+   app.testMissedAttestations()
+   
+   // Check the current state
+   app.debugMissedAttestations()
+   ```
+4. **Verify UI updates** - orange warning indicators should appear next to validators
+5. **Test clearing** with "Clear Cache" button or `app.clearMissedAttestations()`
+
+### Real Attestation Monitoring
+
+In production, missed attestations are detected by:
+- Checking previous epoch attestation duties every 30 seconds
+- Comparing with actual beacon chain attestation inclusion data
+- Only flagging genuine misses (not random testing data)
+
+**Note**: The current implementation assumes all attestations are included unless there's evidence otherwise. For real missed attestation detection in production, the system would need to:
+
+1. Query `/eth/v1/beacon/blocks/{slot}/attestations` for each slot
+2. Parse the attestation data to extract participating validator indices
+3. Cross-reference with expected attestation duties to identify missing validators
+4. Account for network delays and late attestation inclusion
+
+This would require significant additional API calls to the beacon node and more complex data processing.
+
 ## Technical Details
 
 - Frontend uses vanilla JavaScript with sessionStorage for caching

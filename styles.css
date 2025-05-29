@@ -2497,3 +2497,48 @@ footer {
 .validator-item-compact.validator-offline {
     opacity: 0.8;
 }
+
+/* Missed Attestations Styles */
+.missed-attestations {
+    display: inline-block;
+    font-size: 0.85rem;
+    margin-left: 8px;
+    color: var(--warning-color);
+    font-weight: 600;
+    background: rgba(245, 158, 11, 0.1);
+    padding: 2px 6px;
+    border-radius: 4px;
+    border: 1px solid rgba(245, 158, 11, 0.3);
+}
+
+.validator-badge-compact.has-missed-attestations {
+    box-shadow: 0 0 0 2px rgba(245, 158, 11, 0.3);
+}
+
+/* Tab Badge Styles */
+.tab-badge {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    min-width: 18px;
+    height: 18px;
+    background: var(--error-color);
+    color: white;
+    font-size: 0.75rem;
+    font-weight: 600;
+    border-radius: 9px;
+    padding: 0 6px;
+    margin-left: 8px;
+    position: relative;
+    top: -1px;
+}
+
+/* Disabled option styles */
+.disabled-option {
+    opacity: 0.6;
+    cursor: not-allowed;
+}
+
+.disabled-option input[disabled] {
+    cursor: not-allowed;
+}
