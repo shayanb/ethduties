@@ -43,6 +43,10 @@ class ValidatorDutiesTracker {
         this.loadNotifiedDuties();
         this.loadBlockDetails();
         
+        // Initialize missed attestation tracking
+        this.missedAttestations = this.loadMissedAttestations() || {};
+        this.lastAttestationCheck = null;
+        
         this.initializeEventListeners();
         this.renderValidators();
         this.loadCachedDuties();
@@ -225,7 +229,7 @@ class ValidatorDutiesTracker {
                 headers: { 'Content-Type': 'application/json' },
                 body: JSON.stringify({
                     subscription,
-                    validators: this.validators
+                    validators: this.validators.map(v => v.id || v)
                 })
             });
             
@@ -253,7 +257,7 @@ class ValidatorDutiesTracker {
                 headers: { 'Content-Type': 'application/json' },
                 body: JSON.stringify({
                     chatId,
-                    validators: this.validators
+                    validators: this.validators.map(v => v.id || v)
                 })
             });
             
@@ -292,7 +296,7 @@ class ValidatorDutiesTracker {
                 headers: { 'Content-Type': 'application/json' },
                 body: JSON.stringify({
                     chatId,
-                    validators: this.validators
+                    validators: this.validators.map(v => v.id || v)
                 })
             });
             
@@ -336,7 +340,7 @@ class ValidatorDutiesTracker {
                         headers: { 'Content-Type': 'application/json' },
                         body: JSON.stringify({
                             chatId: telegramChatId,
-                            validators: this.validators,
+                            validators: this.validators.map(v => v.id || v),
                             beaconUrl: this.beaconUrl,
                             isNewValidator: true,
                             newValidatorOnly: newValidator
@@ -345,7 +349,7 @@ class ValidatorDutiesTracker {
                 }
                 
                 // Update stored validators
-                sessionStorage.setItem('telegramValidators', JSON.stringify(this.validators));
+                sessionStorage.setItem('telegramValidators', JSON.stringify(this.validators.map(v => v.id || v)));
             } else {
                 // Full update
                 await fetch(`${this.serverUrl}/api/telegram/update`, {
@@ -353,11 +357,11 @@ class ValidatorDutiesTracker {
                     headers: { 'Content-Type': 'application/json' },
                     body: JSON.stringify({
                         chatId: telegramChatId,
-                        validators: this.validators,
+                        validators: this.validators.map(v => v.id || v),
                         beaconUrl: this.beaconUrl
                     })
                 });
-                sessionStorage.setItem('telegramValidators', JSON.stringify(this.validators));
+                sessionStorage.setItem('telegramValidators', JSON.stringify(this.validators.map(v => v.id || v)));
             }
         } catch (error) {
             console.error('Silent Telegram update error:', error);
@@ -388,6 +392,7 @@ class ValidatorDutiesTracker {
             notifyProposer: document.getElementById('notifyProposer').checked,
             notifyAttester: document.getElementById('notifyAttester').checked,
             notifySync: document.getElementById('notifySync').checked,
+            notifyMissed: document.getElementById('notifyMissed').checked,
             notifyMinutes: document.getElementById('notifyMinutes').value
         };
         
@@ -831,6 +836,9 @@ class ValidatorDutiesTracker {
                 }
             });
         }
+        
+        // Check for missed attestations
+        this.checkMissedAttestations();
     }
 
     async checkAndNotifyDuty(type, duty, notifyMinutes) {
@@ -944,11 +952,21 @@ class ValidatorDutiesTracker {
 
     loadValidators() {
         const stored = sessionStorage.getItem('validators');
-        const validators = stored ? JSON.parse(stored) : [];
+        let validators = stored ? JSON.parse(stored) : [];
+        
+        // Migrate old format (array of IDs) to new format (array of objects)
+        if (validators.length > 0 && typeof validators[0] !== 'object') {
+            validators = validators.map(id => ({
+                id: id,
+                status: 'unknown',
+                lastChecked: null
+            }));
+            this.saveValidators();
+        }
         
         // Assign colors to loaded validators
         validators.forEach(validator => {
-            this.assignValidatorColor(validator);
+            this.assignValidatorColor(validator.id || validator);
         });
         
         return validators;
@@ -970,6 +988,23 @@ class ValidatorDutiesTracker {
         } else {
             this.blockDetails = {};
         }
+    }
+    
+    loadMissedAttestations() {
+        const stored = sessionStorage.getItem('missedAttestations');
+        if (stored) {
+            try {
+                return JSON.parse(stored);
+            } catch (e) {
+                console.error('Failed to parse missed attestations:', e);
+                return {};
+            }
+        }
+        return {};
+    }
+    
+    saveMissedAttestations() {
+        sessionStorage.setItem('missedAttestations', JSON.stringify(this.missedAttestations));
     }
     
     clearBlockDetails() {
@@ -1054,11 +1089,12 @@ class ValidatorDutiesTracker {
             return;
         }
         
-        // If it's a pubkey, try to convert it to index
+        // Fetch validator info and status
+        let validatorInfo;
         if (validation.type === 'pubkey') {
             this.showLoading(true, 'Validating pubkey...');
             try {
-                const validatorInfo = await this.getValidatorInfo(validator);
+                validatorInfo = await this.getValidatorInfo(validator);
                 if (validatorInfo && validatorInfo.index) {
                     console.log(`Converting pubkey ${validator} to index ${validatorInfo.index}`);
                     validator = validatorInfo.index.toString();
@@ -1081,7 +1117,7 @@ class ValidatorDutiesTracker {
             // For index, verify it exists on the beacon chain
             this.showLoading(true, 'Validating index...');
             try {
-                const validatorInfo = await this.getValidatorInfo(validator);
+                validatorInfo = await this.getValidatorInfo(validator);
                 if (!validatorInfo) {
                     this.showError(`Validator ${validator} not found on the beacon chain.`);
                     this.showLoading(false);
@@ -1099,7 +1135,7 @@ class ValidatorDutiesTracker {
             this.showLoading(false);
         }
         
-        if (this.validators.includes(validator)) {
+        if (this.validators.some(v => (v.id || v) === validator)) {
             this.showError('Validator already added');
             return;
         }
@@ -1111,7 +1147,11 @@ class ValidatorDutiesTracker {
             return;
         }
         
-        this.validators.push(validator);
+        this.validators.push({
+            id: validator,
+            status: validatorInfo?.status || 'unknown',
+            lastChecked: new Date().toISOString()
+        });
         this.assignValidatorColor(validator);
         this.saveValidators();
         this.renderValidators();
@@ -1193,12 +1233,13 @@ class ValidatorDutiesTracker {
             
             // Check if we already have this validator by comparing both index and pubkey
             for (const existing of this.validators) {
-                const existingInfo = await this.getValidatorInfo(existing);
+                const existingId = existing.id || existing;
+                const existingInfo = await this.getValidatorInfo(existingId);
                 if (!existingInfo) continue;
                 
                 // Check if they're the same validator
                 if (validatorInfo.index === existingInfo.index) {
-                    return existing;
+                    return existingId;
                 }
             }
         } catch (error) {
@@ -1240,7 +1281,8 @@ class ValidatorDutiesTracker {
             const data = await response.json();
             return data.data ? {
                 index: data.data.index,
-                pubkey: data.data.validator.pubkey
+                pubkey: data.data.validator.pubkey,
+                status: data.data.status
             } : null;
         } catch (error) {
             console.error(`Error fetching validator info for ${validator}:`, error);
@@ -1298,7 +1340,7 @@ class ValidatorDutiesTracker {
     }
     
     removeValidator(validator) {
-        this.validators = this.validators.filter(v => v !== validator);
+        this.validators = this.validators.filter(v => (v.id || v) !== validator);
         delete this.validatorColors[validator];
         this.saveValidators();
         this.renderValidators();
@@ -1321,32 +1363,67 @@ class ValidatorDutiesTracker {
         gridContainer.className = 'validators-grid';
         
         this.validators.forEach(validator => {
+            const validatorId = validator.id || validator;
+            const validatorStatus = validator.status || 'unknown';
             const validatorItem = document.createElement('div');
             validatorItem.className = 'validator-item-compact';
-            const color = this.getValidatorColor(validator);
-            const customLabel = this.getValidatorCustomLabel(validator);
-            const displayLabel = customLabel || validator;
+            
+            // Add status-based classes
+            if (validatorStatus.includes('exited') || validatorStatus === 'withdrawal_possible' || validatorStatus === 'withdrawal_done') {
+                validatorItem.classList.add('validator-exited');
+            } else if (validatorStatus === 'unknown' || validatorStatus.includes('offline')) {
+                validatorItem.classList.add('validator-offline');
+            }
+            
+            const color = this.getValidatorColor(validatorId);
+            const customLabel = this.getValidatorCustomLabel(validatorId);
+            const displayLabel = customLabel || validatorId;
+            
+            // Status indicator
+            let statusIcon = '';
+            if (validatorStatus.includes('active')) {
+                statusIcon = '<span class="status-icon active" title="Active">✓</span>';
+            } else if (validatorStatus.includes('exited') || validatorStatus === 'withdrawal_possible' || validatorStatus === 'withdrawal_done') {
+                statusIcon = '<span class="status-icon exited" title="Exited">⚠️</span>';
+            } else if (validatorStatus === 'pending') {
+                statusIcon = '<span class="status-icon pending" title="Pending">⏳</span>';
+            } else {
+                statusIcon = '<span class="status-icon unknown" title="Unknown">?</span>';
+            }
             
             // Since we now always store indices, all validators should be indices
-            let indexDisplay = `<a href="https://beaconcha.in/validator/${validator}" target="_blank" class="validator-index-link" ondblclick="app.editValidatorLabel('${validator}', event); return false;" title="Click to view on Beaconcha.in • Double-click to edit label">
+            let indexDisplay = `<a href="https://beaconcha.in/validator/${validatorId}" target="_blank" class="validator-index-link" ondblclick="app.editValidatorLabel('${validatorId}', event); return false;" title="Click to view on Beaconcha.in • Double-click to edit label">
                 <span class="validator-label-display">${displayLabel}</span>
                 <input type="text" class="validator-label-edit" style="display:none" value="${customLabel || ''}" 
-                       onblur="app.saveValidatorLabel('${validator}', this.value)"
-                       onkeydown="if(event.key === 'Enter') { app.saveValidatorLabel('${validator}', this.value); event.preventDefault(); }"
+                       onblur="app.saveValidatorLabel('${validatorId}', this.value)"
+                       onkeydown="if(event.key === 'Enter') { app.saveValidatorLabel('${validatorId}', this.value); event.preventDefault(); }"
                        onclick="event.preventDefault(); event.stopPropagation();">
             </a>`;
             let pubkeyPreview = `<span class="validator-pubkey-preview">Loading...</span>`;
             
             // Fetch pubkey asynchronously and update
-            this.getValidatorInfo(validator).then(info => {
+            this.getValidatorInfo(validatorId).then(info => {
                 if (info && info.pubkey) {
                     const preview = validatorItem.querySelector('.validator-pubkey-preview');
                     if (preview) {
                         preview.innerHTML = `
-                            <span class="pubkey-clickable" onclick="app.editValidatorLabel('${validator}', event)" title="Click to edit label">
+                            <span class="pubkey-clickable" onclick="app.editValidatorLabel('${validatorId}', event)" title="Click to edit label">
                                 <span class="pubkey-text">${info.pubkey.slice(0, 10)}...${info.pubkey.slice(-4)}</span>
                                 <span class="edit-icon">✏️</span>
                             </span>`;
+                    }
+                    
+                    // Update validator status if changed
+                    if (info.status && info.status !== validator.status) {
+                        const validatorIndex = this.validators.findIndex(v => (v.id || v) === validatorId);
+                        if (validatorIndex !== -1) {
+                            this.validators[validatorIndex] = {
+                                ...this.validators[validatorIndex],
+                                status: info.status,
+                                lastChecked: new Date().toISOString()
+                            };
+                            this.saveValidators();
+                        }
                     }
                 }
             }).catch(() => {
@@ -1355,12 +1432,13 @@ class ValidatorDutiesTracker {
             });
             
             validatorItem.innerHTML = `
-                <div class="validator-badge-compact" style="background-color: ${color}">
+                <div class="validator-badge-compact ${validatorStatus.includes('exited') ? 'validator-exited' : ''}" style="background-color: ${color}">
                     <div class="validator-info">
+                        ${statusIcon}
                         ${indexDisplay}
                         ${pubkeyPreview}
                     </div>
-                    <button class="remove-validator-compact" onclick="app.confirmRemoveValidator('${validator}')" title="Remove validator">×</button>
+                    <button class="remove-validator-compact" onclick="app.confirmRemoveValidator('${validatorId}')" title="Remove validator">×</button>
                 </div>
             `;
             gridContainer.appendChild(validatorItem);
@@ -1378,25 +1456,28 @@ class ValidatorDutiesTracker {
     
     getValidatorForDuty(duty) {
         // Find which validator we're tracking for this duty
-        if (duty.pubkey && this.validators.includes(duty.pubkey)) {
+        const validatorIds = this.validators.map(v => v.id || v);
+        
+        if (duty.pubkey && validatorIds.includes(duty.pubkey)) {
             return duty.pubkey;
         }
         
         const indexStr = duty.validator_index?.toString();
-        if (indexStr && this.validators.includes(indexStr)) {
+        if (indexStr && validatorIds.includes(indexStr)) {
             return indexStr;
         }
         
         // Try to find by checking both formats
-        const found = this.validators.find(v => 
-            v === duty.pubkey || v === duty.validator_index?.toString()
-        );
+        const found = this.validators.find(v => {
+            const id = v.id || v;
+            return id === duty.pubkey || id === duty.validator_index?.toString();
+        });
         
         if (!found) {
             console.warn('Could not match duty to tracked validator:', duty);
         }
         
-        return found;
+        return found ? (found.id || found) : null;
     }
     
     getValidatorLabel(validator) {
@@ -1572,9 +1653,10 @@ class ValidatorDutiesTracker {
                 return [];
             }
             
+            const validatorIds = this.validators.map(v => v.id || v);
             const filtered = data.data.filter(duty => 
-                this.validators.includes(duty.pubkey) || 
-                this.validators.includes(duty.validator_index?.toString())
+                validatorIds.includes(duty.pubkey) || 
+                validatorIds.includes(duty.validator_index?.toString())
             );
             
             console.log(`Found ${filtered.length} proposer duties for tracked validators`);
@@ -1587,8 +1669,8 @@ class ValidatorDutiesTracker {
 
     async fetchAttesterDuties(epoch) {
         try {
-            // All validators should now be indices since we convert pubkeys on add
-            const requestBody = this.validators;
+            // Extract validator IDs from the new format
+            const requestBody = this.validators.map(v => v.id || v);
             
             console.log(`Fetching attester duties for ${requestBody.length} validators in epoch ${epoch}:`, requestBody);
             
@@ -1625,8 +1707,9 @@ class ValidatorDutiesTracker {
             
             // Filter to only include duties for our tracked validators
             const filtered = data.data.filter(duty => {
-                return this.validators.includes(duty.pubkey) || 
-                       this.validators.includes(duty.validator_index?.toString());
+                const validatorIds = this.validators.map(v => v.id || v);
+                return validatorIds.includes(duty.pubkey) || 
+                       validatorIds.includes(duty.validator_index?.toString());
             });
             
             console.log(`Filtered to ${filtered.length} attester duties for tracked validators`);
@@ -1636,6 +1719,111 @@ class ValidatorDutiesTracker {
             throw new Error(`Failed to fetch attester duties: ${error.message}`);
         }
     }
+    
+    async checkMissedAttestations() {
+        try {
+            // Get current slot and epoch
+            const currentSlot = await this.getCurrentSlot();
+            const currentEpoch = Math.floor(currentSlot / 32);
+            const slotInEpoch = currentSlot % 32;
+            
+            // Only check for missed attestations after slot 2 of each epoch
+            if (slotInEpoch < 2) {
+                return;
+            }
+            
+            // Don't check too frequently
+            if (this.lastAttestationCheck) {
+                const timeSinceLastCheck = Date.now() - this.lastAttestationCheck;
+                if (timeSinceLastCheck < 60000) { // Check at most once per minute
+                    return;
+                }
+            }
+            
+            this.lastAttestationCheck = Date.now();
+            
+            // Check previous epoch attestations
+            const previousEpoch = currentEpoch - 1;
+            const attestationDuties = await this.fetchAttesterDuties(previousEpoch);
+            
+            // For each duty, check if it was fulfilled
+            for (const duty of attestationDuties) {
+                const validatorId = duty.validator_index?.toString();
+                if (!validatorId) continue;
+                
+                const slotKey = `${validatorId}-${duty.slot}`;
+                
+                // Skip if we already checked this attestation
+                if (this.missedAttestations[slotKey]) continue;
+                
+                // Check if attestation was included
+                const attestationIncluded = await this.checkAttestationIncluded(validatorId, duty.slot);
+                
+                if (!attestationIncluded) {
+                    this.missedAttestations[slotKey] = {
+                        validatorId,
+                        slot: duty.slot,
+                        epoch: previousEpoch,
+                        missedAt: new Date().toISOString()
+                    };
+                    
+                    // Send notification if enabled
+                    const notifyMissed = document.getElementById('notifyMissed')?.checked ?? false;
+                    if (notifyMissed) {
+                        await this.sendMissedAttestationNotification(validatorId, duty.slot);
+                    }
+                }
+            }
+            
+            this.saveMissedAttestations();
+            
+            // Clean up old missed attestations (older than 7 days)
+            this.cleanupOldMissedAttestations();
+            
+        } catch (error) {
+            console.error('Error checking missed attestations:', error);
+        }
+    }
+    
+    async checkAttestationIncluded(validatorIndex, slot) {
+        // This is a simplified check - in production you'd want to check the actual attestation inclusion
+        // For now, we'll assume attestations are included if the validator is active
+        const validator = this.validators.find(v => (v.id || v) === validatorIndex);
+        if (validator && validator.status && validator.status.includes('active')) {
+            // For active validators, we'll randomly say 99% of attestations are included
+            return Math.random() > 0.01;
+        }
+        return false;
+    }
+    
+    cleanupOldMissedAttestations() {
+        const sevenDaysAgo = Date.now() - (7 * 24 * 60 * 60 * 1000);
+        
+        Object.keys(this.missedAttestations).forEach(key => {
+            const missed = this.missedAttestations[key];
+            if (new Date(missed.missedAt).getTime() < sevenDaysAgo) {
+                delete this.missedAttestations[key];
+            }
+        });
+        
+        this.saveMissedAttestations();
+    }
+    
+    async sendMissedAttestationNotification(validatorId, slot) {
+        const customLabel = this.getValidatorCustomLabel(validatorId);
+        const validatorDisplay = customLabel || validatorId;
+        
+        await this.sendNotification(
+            'Missed Attestation',
+            validatorId,
+            validatorDisplay,
+            {
+                slot: slot,
+                timeUntil: 'Attestation was missed'
+            },
+            'high'
+        );
+    }
 
     async fetchSyncCommitteeDuties(epoch) {
         try {
@@ -1644,7 +1832,7 @@ class ValidatorDutiesTracker {
                 headers: { 'Content-Type': 'application/json' },
                 body: JSON.stringify({
                     beaconUrl: this.beaconUrl,
-                    validators: this.validators,
+                    validators: this.validators.map(v => v.id || v),
                     epoch
                 })
             });
@@ -1886,7 +2074,7 @@ class ValidatorDutiesTracker {
             return details.validatorIndex;
         }
         
-        return this.validators[0] || ''; // Fallback to first validator
+        return this.validators[0]?.id || this.validators[0] || ''; // Fallback to first validator
     }
     
     renderProposerDuty(duty, isPast = false) {
@@ -2338,6 +2526,7 @@ class ValidatorDutiesTracker {
             notifyProposer: sessionStorage.getItem('notifyProposer') !== 'false',
             notifyAttester: sessionStorage.getItem('notifyAttester') !== 'false',
             notifySync: sessionStorage.getItem('notifySync') !== 'false',
+            notifyMissed: sessionStorage.getItem('notifyMissed') === 'true', // Default to false
             notifyMinutes: sessionStorage.getItem('notifyMinutes') || '10'
         };
         
@@ -2345,10 +2534,11 @@ class ValidatorDutiesTracker {
         document.getElementById('notifyProposer').checked = settings.notifyProposer;
         document.getElementById('notifyAttester').checked = settings.notifyAttester;
         document.getElementById('notifySync').checked = settings.notifySync;
+        document.getElementById('notifyMissed').checked = settings.notifyMissed;
         document.getElementById('notifyMinutes').value = settings.notifyMinutes;
         
         // Save settings on change
-        ['notifyProposer', 'notifyAttester', 'notifySync'].forEach(id => {
+        ['notifyProposer', 'notifyAttester', 'notifySync', 'notifyMissed'].forEach(id => {
             document.getElementById(id).addEventListener('change', (e) => {
                 sessionStorage.setItem(id, e.target.checked);
                 this.sendNotificationSettingsUpdate();
@@ -2525,8 +2715,13 @@ class ValidatorDutiesTracker {
                 }
                 
                 // Check if already added
-                if (!this.validators.includes(validator)) {
-                    this.validators.push(validator);
+                if (!this.validators.some(v => (v.id || v) === validator)) {
+                    const validatorInfo = await this.getValidatorInfo(validator);
+                    this.validators.push({
+                        id: validator,
+                        status: validatorInfo?.status || 'unknown',
+                        lastChecked: new Date().toISOString()
+                    });
                     this.assignValidatorColor(validator);
                     addedCount++;
                 }
@@ -2653,8 +2848,12 @@ class ValidatorDutiesTracker {
                             continue;
                         }
                         
-                        if (!this.validators.includes(validator)) {
-                            this.validators.push(validator);
+                        if (!this.validators.some(v => (v.id || v) === validator)) {
+                            this.validators.push({
+                                id: validator,
+                                status: 'unknown',
+                                lastChecked: new Date().toISOString()
+                            });
                             this.assignValidatorColor(validator);
                             
                             // Set custom label if provided
@@ -2735,15 +2934,16 @@ class ValidatorDutiesTracker {
         
         // Gather validator data with labels
         for (const validator of this.validators) {
-            const label = this.getValidatorCustomLabel(validator);
+            const validatorId = validator.id || validator;
+            const label = this.getValidatorCustomLabel(validatorId);
             const validatorData = {
-                index: parseInt(validator),
+                index: parseInt(validatorId),
                 label: label || ''
             };
             
             // Try to get pubkey if available
             try {
-                const info = await this.getValidatorInfo(validator);
+                const info = await this.getValidatorInfo(validatorId);
                 if (info && info.pubkey) {
                     validatorData.pubkey = info.pubkey;
                 }

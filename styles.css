@@ -2447,3 +2447,47 @@ footer {
     text-overflow: ellipsis;
     white-space: nowrap;
 }
+/* Validator Status Styles */
+.status-icon {
+    display: inline-block;
+    font-size: 0.9rem;
+    margin-right: 6px;
+    vertical-align: middle;
+}
+
+.status-icon.active {
+    color: var(--success-color);
+}
+
+.status-icon.exited {
+    color: var(--warning-color);
+}
+
+.status-icon.pending {
+    color: var(--secondary-color);
+}
+
+.status-icon.unknown {
+    color: var(--text-secondary);
+}
+
+/* Exited/Offline Validator Styles */
+.validator-badge-compact.validator-exited {
+    opacity: 0.6;
+    background: repeating-linear-gradient(
+        45deg,
+        transparent,
+        transparent 10px,
+        rgba(0, 0, 0, 0.05) 10px,
+        rgba(0, 0, 0, 0.05) 20px
+    );
+}
+
+.validator-item-compact.validator-exited .validator-info {
+    text-decoration: line-through;
+    opacity: 0.7;
+}
+
+.validator-item-compact.validator-offline {
+    opacity: 0.8;
+}
