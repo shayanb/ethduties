@@ -1,33 +1,70 @@
 version: '3.8'
 
 services:
-  ethduties:
-    build: .
-    image: ethduties:latest
-    container_name: ethduties
+  traefik:
+    image: traefik:v2.11
+    container_name: traefik
     restart: unless-stopped
     ports:
-      - "${PORT:-3000}:3000"
+      - "80:80"
+      - "443:443"
+    command:
+      - "--api.dashboard=false"
+      - "--providers.docker=true"
+      - "--providers.docker.exposedbydefault=false"
+      - "--entrypoints.web.address=:80"
+      - "--entrypoints.websecure.address=:443"
+      - "--certificatesresolvers.letsencrypt.acme.tlschallenge=true"
+      - "--certificatesresolvers.letsencrypt.acme.email=${ACME_EMAIL}"
+      - "--certificatesresolvers.letsencrypt.acme.storage=/letsencrypt/acme.json"
+      - "--log.level=INFO"
+    volumes:
+      - /var/run/docker.sock:/var/run/docker.sock:ro
+      - traefik-letsencrypt:/letsencrypt
+    networks:
+      - ethduties-network
+
+  ethduties:
+    image: ghcr.io/shayanb/ethduties:latest
+    container_name: ethduties
+    restart: unless-stopped
     environment:
       - NODE_ENV=production
       - PORT=${PORT:-3000}
       - TELEGRAM_BOT_TOKEN=${TELEGRAM_BOT_TOKEN}
       - VAPID_PUBLIC_KEY=${VAPID_PUBLIC_KEY}
       - VAPID_PRIVATE_KEY=${VAPID_PRIVATE_KEY}
-      - SERVER_URL=${SERVER_URL:-http://localhost:3000}
+      - SERVER_URL=${SERVER_URL}
     networks:
       - ethduties-network
+    volumes:
+      # Optional: Mount for persistent data if needed
+      - ethduties-data:/app/data
     labels:
+      # Portainer labels
+      - "io.portainer.accesscontrol.public"
+      # Auto-update with Watchtower
       - "com.centurylinklabs.watchtower.enable=true"
+      # Traefik labels for reverse proxy
       - "traefik.enable=true"
-      - "traefik.http.routers.ethduties.rule=Host(`${DOMAIN:-ethduties.local}`)"
+      # HTTP router for redirect
+      - "traefik.http.routers.ethduties-http.rule=Host(`ethduties.com`) || Host(`ethduti.es`) || Host(`www.ethduties.com`) || Host(`www.ethduti.es`)"
+      - "traefik.http.routers.ethduties-http.entrypoints=web"
+      - "traefik.http.routers.ethduties-http.middlewares=redirect-to-https"
+      # HTTPS router
+      - "traefik.http.routers.ethduties.rule=Host(`ethduties.com`) || Host(`ethduti.es`) || Host(`www.ethduties.com`) || Host(`www.ethduti.es`)"
+      - "traefik.http.routers.ethduties.entrypoints=websecure"
+      - "traefik.http.routers.ethduties.tls=true"
+      - "traefik.http.routers.ethduties.tls.certresolver=letsencrypt"
+      # Service
       - "traefik.http.services.ethduties.loadbalancer.server.port=3000"
-    healthcheck:
-      test: ["CMD", "wget", "--quiet", "--tries=1", "--spider", "http://localhost:3000/health"]
-      interval: 30s
-      timeout: 10s
-      retries: 3
-      start_period: 40s
+      # Middleware for HTTPS redirect
+      - "traefik.http.middlewares.redirect-to-https.redirectscheme.scheme=https"
+      - "traefik.http.middlewares.redirect-to-https.redirectscheme.permanent=true"
+
+volumes:
+  ethduties-data:
+  traefik-letsencrypt:
 
 networks:
   ethduties-network:

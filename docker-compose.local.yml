@@ -1,0 +1,30 @@
+version: '3.8'
+
+services:
+  ethduties:
+    build: .
+    image: ethduties:latest
+    ports:
+      - "${PORT:-3000}:3000"
+    container_name: ethduties
+    restart: unless-stopped
+    environment:
+      - NODE_ENV=production
+      - PORT=${PORT:-3000}
+      - TELEGRAM_BOT_TOKEN=${TELEGRAM_BOT_TOKEN}
+      - VAPID_PUBLIC_KEY=${VAPID_PUBLIC_KEY}
+      - VAPID_PRIVATE_KEY=${VAPID_PRIVATE_KEY}
+      - SERVER_URL=${SERVER_URL:-http://localhost:3000}
+    networks:
+      - ethduties-network
+    healthcheck:
+      test: ["CMD", "wget", "--quiet", "--tries=1", "--spider", "http://localhost:3000/health"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 40s
+
+networks:
+  ethduties-network:
+    driver: bridge
+    name: ethduties-network
