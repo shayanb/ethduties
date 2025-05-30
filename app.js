@@ -52,6 +52,7 @@ class ValidatorDutiesTracker {
         this.loadCachedDuties();
         this.initializeNotifications();
         this.initializeDashboard();
+        this.initializeDarkMode();
         this.startCountdownTimer();
     }
 
@@ -148,6 +149,9 @@ class ValidatorDutiesTracker {
         
         // Dashboard mode toggle
         document.getElementById('dashboardModeToggle').addEventListener('click', () => this.toggleDashboardMode());
+        
+        // Dark mode toggle
+        document.getElementById('darkModeToggle').addEventListener('click', () => this.toggleDarkMode());
         
         // Dashboard exit button
         document.getElementById('dashboardExitBtn').addEventListener('click', () => this.exitDashboardMode());
@@ -259,7 +263,6 @@ class ValidatorDutiesTracker {
     
     async testBrowserNotification() {
         try {
-            // First check if notifications are supported and permitted
             if (!('Notification' in window)) {
                 this.showNotificationStatus('browser', 'Notifications not supported in this browser', false);
                 return;
@@ -270,50 +273,30 @@ class ValidatorDutiesTracker {
                 return;
             }
             
-            // Force page to lose focus to ensure notification shows
-            const tempLink = document.createElement('a');
-            tempLink.href = '#';
-            tempLink.style.position = 'absolute';
-            tempLink.style.top = '-9999px';
-            document.body.appendChild(tempLink);
-            tempLink.focus();
-            
-            // Small delay to ensure focus change
-            await new Promise(resolve => setTimeout(resolve, 100));
-            
             const iconUrl = window.location.origin + '/favicon.ico';
-            const options = {
+            const notification = new Notification('🎉 ETH Duties Test Notification', {
                 body: 'Desktop notifications are working! You will receive alerts for your validator duties.',
                 icon: iconUrl,
                 badge: iconUrl,
-                tag: 'test-notification-' + Date.now(), // Unique tag
+                tag: 'test-notification-' + Date.now(),
                 requireInteraction: document.getElementById('desktopPersistent')?.checked !== false,
                 vibrate: [200, 100, 200],
-                timestamp: Date.now(),
                 silent: false,
                 renotify: true
-            };
-            
-            console.log('Creating test notification with options:', options);
-            
-            const notification = new Notification('🎉 ETH Duties Test Notification', options);
+            });
             
             notification.onclick = () => {
                 window.focus();
                 notification.close();
-                document.body.removeChild(tempLink);
             };
             
             notification.onshow = () => {
-                console.log('Test notification shown successfully');
                 this.showNotificationStatus('browser', 'Test notification sent! Check your desktop.', true);
-                setTimeout(() => document.body.removeChild(tempLink), 1000);
             };
             
             notification.onerror = (error) => {
                 console.error('Test notification error:', error);
                 this.showNotificationStatus('browser', 'Failed to show notification. Check browser settings.', false);
-                document.body.removeChild(tempLink);
             };
             
             // Play sound if enabled
@@ -326,8 +309,14 @@ class ValidatorDutiesTracker {
                     oscillator.connect(gainNode);
                     gainNode.connect(audioContext.destination);
                     
-                    oscillator.frequency.value = 800;
-                    gainNode.gain.value = 0.1;
+                    // Retro test sound - short blip
+                    oscillator.type = 'square';
+                    oscillator.frequency.value = 392; // G4 note
+                    
+                    // Subtle volume with envelope
+                    gainNode.gain.setValueAtTime(0, audioContext.currentTime);
+                    gainNode.gain.linearRampToValueAtTime(0.03, audioContext.currentTime + 0.01);
+                    gainNode.gain.exponentialRampToValueAtTime(0.001, audioContext.currentTime + 0.1);
                     
                     oscillator.start();
                     oscillator.stop(audioContext.currentTime + 0.1);
@@ -867,20 +856,22 @@ class ValidatorDutiesTracker {
         
         // Send desktop notification
         if (browserEnabled) {
-            // Get validator label for display
+            // Get validator label for display (without pubkey for concise desktop notifications)
             const validatorLabel = this.getValidatorLabel(validator);
-            let displayName = validatorLabel;
-            if (proposerDuty && proposerDuty.pubkey) {
-                displayName = `${validatorLabel} (${proposerDuty.pubkey.slice(0, 10)}...)`;
-            }
             
             const title = '🎉💰 BLOCK CONFIRMED! 🎉💰';
-            const body = `${displayName} - ${details.totalReward.toFixed(3)} ETH earned! (${details.txCount} txs)`;
+            let body = `Validator: ${validatorLabel}\nSlot: ${slot}\n\n${details.totalReward.toFixed(3)} ETH earned!\n${details.txCount} transactions`;
+            
+            // Add graffiti if available
+            if (details.graffiti && details.graffiti.trim()) {
+                body += `\n\nGraffiti: "${details.graffiti.trim()}"`;
+            }
             
             // Show desktop notification
             if ('Notification' in window && Notification.permission === 'granted') {
                 try {
                     const iconUrl = window.location.origin + '/favicon.ico';
+                    
                     const notification = new Notification(title, {
                         body: body,
                         icon: iconUrl,
@@ -888,7 +879,6 @@ class ValidatorDutiesTracker {
                         tag: `block-${slot}`,
                         requireInteraction: document.getElementById('desktopPersistent')?.checked !== false,
                         vibrate: [200, 100, 200, 100, 200],
-                        timestamp: Date.now(),
                         silent: false,
                         renotify: true
                     });
@@ -898,8 +888,8 @@ class ValidatorDutiesTracker {
                         notification.close();
                     };
                     
-                    notification.onshow = () => {
-                        console.log('Block confirmation desktop notification shown');
+                    notification.onerror = (error) => {
+                        console.error('Block notification error:', error);
                     };
                     
                     // Play sound if enabled
@@ -912,11 +902,16 @@ class ValidatorDutiesTracker {
                             oscillator.connect(gainNode);
                             gainNode.connect(audioContext.destination);
                             
-                            // Celebration sound - ascending tones
-                            oscillator.frequency.setValueAtTime(600, audioContext.currentTime);
-                            oscillator.frequency.linearRampToValueAtTime(800, audioContext.currentTime + 0.1);
-                            oscillator.frequency.linearRampToValueAtTime(1000, audioContext.currentTime + 0.2);
-                            gainNode.gain.value = 0.1;
+                            // Retro celebration sound - 8-bit style ascending tones
+                            oscillator.type = 'square'; // 8-bit style waveform
+                            oscillator.frequency.setValueAtTime(440, audioContext.currentTime);
+                            oscillator.frequency.exponentialRampToValueAtTime(659.25, audioContext.currentTime + 0.15);
+                            oscillator.frequency.exponentialRampToValueAtTime(880, audioContext.currentTime + 0.25);
+                            
+                            // Subtle volume with envelope
+                            gainNode.gain.setValueAtTime(0, audioContext.currentTime);
+                            gainNode.gain.linearRampToValueAtTime(0.05, audioContext.currentTime + 0.01);
+                            gainNode.gain.exponentialRampToValueAtTime(0.001, audioContext.currentTime + 0.3);
                             
                             oscillator.start();
                             oscillator.stop(audioContext.currentTime + 0.3);
@@ -1084,75 +1079,55 @@ class ValidatorDutiesTracker {
                 try {
                     console.log('Sending browser notification for validator:', validator);
                     
-                    // Format validator display
+                    // Format validator display (without pubkey for concise desktop notifications)
                     const validatorLabel = this.getValidatorLabel(validator);
-                    let validatorDisplay = validatorLabel;
-                    if (duty.pubkey) {
-                        validatorDisplay = `${validatorLabel} (${duty.pubkey.slice(0, 10)}...)`;
-                    }
                     
-                    // Create notification title and body
+                    // Create notification title and body using Telegram format but without pubkey
                     let title, body;
                     if (type === 'Proposer') {
                         title = '🎉💰 BLOCK PROPOSAL! 🎉💰';
-                        body = `Validator ${validatorDisplay} - ${this.formatTimeUntil(timeUntil)}`;
+                        body = `In ${minutesUntil} minute${minutesUntil === 1 ? '' : 's'}\n\nValidator: ${validatorLabel}\nSlot: ${duty.slot}`;
                     } else if (type === 'Attester') {
                         title = '📝 Attestation Duty';
-                        body = `Validator ${validatorDisplay} - ${this.formatTimeUntil(timeUntil)}`;
+                        body = `In ${minutesUntil} minute${minutesUntil === 1 ? '' : 's'}\n\nValidator: ${validatorLabel}\nSlot: ${duty.slot}`;
                     } else if (type === 'Sync Committee') {
                         title = '🔐💎 SYNC COMMITTEE 💎🔐';
-                        body = `Validator ${validatorDisplay} - Active now`;
+                        body = `Validator: ${validatorLabel}\n${duty.period === 'current' ? 'Currently active' : 'Starting soon'}\n~27 hours of enhanced rewards`;
                     } else if (type === 'Next Sync Committee') {
                         title = '🔮💎 NEXT SYNC COMMITTEE 💎🔮';
-                        body = `Validator ${validatorDisplay} - Starting ${this.formatTimeUntil(timeUntil)}`;
+                        body = `Starting in ${minutesUntil} minute${minutesUntil === 1 ? '' : 's'}\n\nValidator: ${validatorLabel}\n~27 hours of enhanced rewards ahead!`;
                     } else {
                         title = `${type} Duty`;
-                        body = `Validator ${validatorDisplay} - ${this.formatTimeUntil(timeUntil)}`;
+                        body = `In ${minutesUntil} minute${minutesUntil === 1 ? '' : 's'}\n\nValidator: ${validatorLabel}\nSlot: ${duty.slot}`;
                     }
                     
                     // Show desktop notification
                     if ('Notification' in window && Notification.permission === 'granted') {
-                        console.log('Creating desktop notification:', { 
-                            title, 
-                            body,
-                            isFocused: document.hasFocus(),
-                            visibility: document.visibilityState
-                        });
-                        
                         try {
-                            // Use absolute URL for icon
                             const iconUrl = window.location.origin + '/favicon.ico';
                             
-                            // Create notification immediately
-                            const showNotification = () => {
-                                const notification = new Notification(title, {
-                                    body: body,
-                                    icon: iconUrl,
-                                    badge: iconUrl,
-                                    tag: dutyKey,
-                                    requireInteraction: document.getElementById('desktopPersistent')?.checked !== false,
-                                    vibrate: [200, 100, 200],
-                                    timestamp: Date.now(),
-                                    silent: false,
-                                    renotify: true
-                                });
-                                
-                                notification.onclick = () => {
-                                    window.focus();
-                                    notification.close();
-                                };
-                                
-                                notification.onerror = (error) => {
-                                    console.error('Notification error:', error);
-                                };
-                                
-                                notification.onshow = () => {
-                                    console.log('Desktop notification shown successfully');
-                                };
+                            const notification = new Notification(title, {
+                                body: body,
+                                icon: iconUrl,
+                                badge: iconUrl,
+                                tag: dutyKey,
+                                requireInteraction: document.getElementById('desktopPersistent')?.checked !== false,
+                                vibrate: [200, 100, 200],
+                                silent: false,
+                                renotify: true
+                            });
+                            
+                            notification.onclick = () => {
+                                window.focus();
+                                notification.close();
+                                if (validator) {
+                                    window.open(`https://beaconcha.in/validator/${validator}`, '_blank');
+                                }
                             };
                             
-                            // Show immediately regardless of focus
-                            showNotification();
+                            notification.onerror = (error) => {
+                                console.error('Notification error:', error);
+                            };
                             
                         } catch (notifError) {
                             console.error('Failed to create notification:', notifError);
@@ -1168,11 +1143,18 @@ class ValidatorDutiesTracker {
                                 oscillator.connect(gainNode);
                                 gainNode.connect(audioContext.destination);
                                 
-                                oscillator.frequency.value = urgency === 'critical' ? 1000 : urgency === 'urgent' ? 900 : 800;
-                                gainNode.gain.value = 0.1;
+                                // Retro duty notification sound - different pitched square waves
+                                oscillator.type = 'square';
+                                const baseFreq = urgency === 'critical' ? 523.25 : urgency === 'urgent' ? 440 : 349.23; // C5, A4, F4
+                                oscillator.frequency.value = baseFreq;
+                                
+                                // Subtle volume with envelope
+                                gainNode.gain.setValueAtTime(0, audioContext.currentTime);
+                                gainNode.gain.linearRampToValueAtTime(0.03, audioContext.currentTime + 0.01);
+                                gainNode.gain.exponentialRampToValueAtTime(0.001, audioContext.currentTime + (urgency === 'critical' ? 0.25 : 0.15));
                                 
                                 oscillator.start();
-                                oscillator.stop(audioContext.currentTime + (urgency === 'critical' ? 0.3 : 0.1));
+                                oscillator.stop(audioContext.currentTime + (urgency === 'critical' ? 0.25 : 0.15));
                                 
                                 console.log('Notification sound played');
                             } catch (soundError) {
@@ -3521,6 +3503,24 @@ class ValidatorDutiesTracker {
         }
     }
 
+    initializeDarkMode() {
+        // Load saved theme preference or default to light
+        const savedTheme = sessionStorage.getItem('darkMode') || 'light';
+        document.documentElement.setAttribute('data-theme', savedTheme);
+        
+        // Update toggle button icons
+        const sunIcon = document.querySelector('#darkModeToggle .sun-icon');
+        const moonIcon = document.querySelector('#darkModeToggle .moon-icon');
+        
+        if (savedTheme === 'dark') {
+            sunIcon.classList.add('hidden');
+            moonIcon.classList.remove('hidden');
+        } else {
+            sunIcon.classList.remove('hidden');
+            moonIcon.classList.add('hidden');
+        }
+    }
+
     toggleDashboardMode() {
         this.isDashboardMode = !this.isDashboardMode;
         sessionStorage.setItem('dashboardMode', this.isDashboardMode.toString());
@@ -3579,6 +3579,27 @@ class ValidatorDutiesTracker {
         
         // Switch to normal mode
         this.switchToNormal();
+    }
+
+    toggleDarkMode() {
+        const isDark = document.documentElement.getAttribute('data-theme') === 'dark';
+        const newTheme = isDark ? 'light' : 'dark';
+        
+        // Update theme
+        document.documentElement.setAttribute('data-theme', newTheme);
+        sessionStorage.setItem('darkMode', newTheme);
+        
+        // Update toggle button icons
+        const sunIcon = document.querySelector('#darkModeToggle .sun-icon');
+        const moonIcon = document.querySelector('#darkModeToggle .moon-icon');
+        
+        if (newTheme === 'dark') {
+            sunIcon.classList.add('hidden');
+            moonIcon.classList.remove('hidden');
+        } else {
+            sunIcon.classList.remove('hidden');
+            moonIcon.classList.add('hidden');
+        }
     }
 
     startDashboardUpdates() {

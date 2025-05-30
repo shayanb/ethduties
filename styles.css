@@ -787,6 +787,7 @@ footer a:hover {
     border-radius: 6px;
 }
 
+
 .telegram-setup {
     grid-column: 1;
     grid-row: 1;
@@ -2749,4 +2750,154 @@ footer {
 
 .disabled-option input[disabled] {
     cursor: not-allowed;
+}
+
+/* Dark Mode Toggle */
+.dark-mode-toggle {
+    display: flex;
+    align-items: center;
+}
+
+.dark-mode-btn {
+    background: transparent;
+    border: 2px solid var(--text-secondary);
+    border-radius: 50%;
+    width: 40px;
+    height: 40px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    cursor: pointer;
+    transition: all 0.3s ease;
+    color: var(--text-secondary);
+    position: relative;
+}
+
+.dark-mode-btn:hover {
+    border-color: var(--secondary-color);
+    color: var(--secondary-color);
+    transform: scale(1.1);
+}
+
+.dark-mode-btn .sun-icon,
+.dark-mode-btn .moon-icon {
+    transition: all 0.3s ease;
+    position: absolute;
+}
+
+.dark-mode-btn .moon-icon.hidden,
+.dark-mode-btn .sun-icon.hidden {
+    opacity: 0;
+    transform: rotate(180deg);
+}
+
+/* Dark Mode Styles */
+[data-theme="dark"] {
+    --primary-color: #3b82f6;
+    --secondary-color: #60a5fa;
+    --success-color: #34d399;
+    --warning-color: #fbbf24;
+    --error-color: #f87171;
+    --bg-color: #1f2937;
+    --card-bg: #374151;
+    --text-primary: #f9fafb;
+    --text-secondary: #d1d5db;
+    --border-color: #4b5563;
+}
+
+[data-theme="dark"] body {
+    background-color: var(--bg-color);
+    color: var(--text-primary);
+}
+
+[data-theme="dark"] .main-nav {
+    background: var(--card-bg);
+    border: 1px solid var(--border-color);
+}
+
+[data-theme="dark"] .nav-btn:hover {
+    background-color: var(--bg-color);
+}
+
+[data-theme="dark"] input[type="text"],
+[data-theme="dark"] select {
+    background-color: var(--bg-color);
+    color: var(--text-primary);
+    border-color: var(--border-color);
+}
+
+[data-theme="dark"] input[type="text"]:focus,
+[data-theme="dark"] select:focus {
+    border-color: var(--secondary-color);
+}
+
+[data-theme="dark"] .add-validator-form {
+    background-color: var(--bg-color);
+    border-color: var(--border-color);
+}
+
+[data-theme="dark"] .validators-list li {
+    background-color: var(--bg-color);
+}
+
+[data-theme="dark"] .duty-item {
+    background-color: var(--bg-color);
+}
+
+[data-theme="dark"] .status-message.error {
+    background-color: var(--error-color);
+    border-color: #dc2626;
+}
+
+[data-theme="dark"] .status-message.success {
+    background-color: var(--success-color);
+    border-color: #059669;
+}
+
+[data-theme="dark"] .status-message.info {
+    background-color: var(--secondary-color);
+    border-color: #2563eb;
+}
+
+[data-theme="dark"] .grid-cell {
+    background: var(--bg-color);
+    border-color: var(--border-color);
+}
+
+[data-theme="dark"] .desktop-options {
+    background: rgba(255, 255, 255, 0.05);
+}
+
+[data-theme="dark"] .notification-type {
+    background-color: var(--bg-color);
+}
+
+[data-theme="dark"] .notification-settings {
+    background-color: var(--bg-color);
+}
+
+[data-theme="dark"] .modal-content {
+    background-color: var(--card-bg);
+    color: var(--text-primary);
+}
+
+[data-theme="dark"] .modal-header {
+    border-color: var(--border-color);
+}
+
+[data-theme="dark"] .modal-close {
+    color: var(--text-secondary);
+}
+
+[data-theme="dark"] .modal-close:hover {
+    color: var(--text-primary);
+}
+
+[data-theme="dark"] .beacon-error-banner {
+    background: #7f1d1d;
+    border-bottom-color: #dc2626;
+}
+
+[data-theme="dark"] .error-content {
+    color: #f87171;
 }
