@@ -2679,11 +2679,11 @@ class ValidatorDutiesTracker {
                     <a href="https://beaconcha.in/validator/${duty.validator}" target="_blank" class="validator-tag" style="background-color: ${color}" title="View validator ${duty.validator}">${label}</a>
                     <div class="duty-content">
                         <div class="duty-header">
-                            <span class="duty-type">Sync Committee</span>
+                            <span class="duty-type">${dutyInfo}</span>
                             <span class="duty-time">${timeDisplay}</span>
                         </div>
                         <div class="duty-details">
-                            <div>${dutyInfo}</div>
+                            <div>Sync Committee</div>
                         </div>
                     </div>
                 </div>
