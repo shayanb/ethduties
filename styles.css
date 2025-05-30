@@ -441,6 +441,8 @@ input[type="checkbox"] {
     font-size: 1rem;
     width: 80px;
     font-weight: 600;
+    position: relative;
+    z-index: 10;
 }
 
 .remove-validator-compact {
@@ -749,6 +751,158 @@ footer a {
 }
 
 footer a:hover {
+    text-decoration: underline;
+}
+
+.notification-grid-2x2 {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    grid-template-rows: auto auto;
+    gap: 20px;
+}
+
+.grid-cell {
+    background: var(--bg-color);
+    padding: 20px;
+    border-radius: 8px;
+    border: 1px solid var(--border-color);
+}
+
+.grid-cell h3 {
+    font-size: 1.1rem;
+    margin-bottom: 15px;
+    color: var(--primary-color);
+}
+
+.platform-controls {
+    display: flex;
+    gap: 10px;
+    margin-bottom: 15px;
+}
+
+.desktop-options {
+    margin-bottom: 15px;
+    padding: 15px;
+    background: rgba(0, 0, 0, 0.03);
+    border-radius: 6px;
+}
+
+.telegram-setup {
+    grid-column: 1;
+    grid-row: 1;
+}
+
+.desktop-setup {
+    grid-column: 2;
+    grid-row: 1;
+}
+
+.telegram-duties {
+    grid-column: 1;
+    grid-row: 2;
+}
+
+.desktop-duties {
+    grid-column: 2;
+    grid-row: 2;
+}
+
+@media (max-width: 768px) {
+    .notification-grid-2x2 {
+        grid-template-columns: 1fr;
+        grid-template-rows: auto auto auto auto;
+    }
+    
+    .telegram-setup {
+        grid-column: 1;
+        grid-row: 1;
+    }
+    
+    .desktop-setup {
+        grid-column: 1;
+        grid-row: 2;
+    }
+    
+    .telegram-duties {
+        grid-column: 1;
+        grid-row: 3;
+    }
+    
+    .desktop-duties {
+        grid-column: 1;
+        grid-row: 4;
+    }
+}
+
+/* Panel Header Styles */
+.panel-header {
+    margin-bottom: 20px;
+    padding-bottom: 15px;
+    border-bottom: 1px solid var(--border-color);
+}
+
+.panel-header h3 {
+    font-size: 1.2rem;
+    color: var(--primary-color);
+    margin-bottom: 5px;
+}
+
+.panel-subtitle {
+    font-size: 0.9rem;
+    color: var(--text-secondary);
+    margin: 0;
+}
+
+/* FAQ Styles */
+.faq-section {
+    background: var(--card-bg);
+    padding: 30px;
+    border-radius: 12px;
+    box-shadow: 0 1px 3px rgba(0, 0, 0, 0.1);
+}
+
+.faq-item {
+    margin-bottom: 25px;
+    padding-bottom: 25px;
+    border-bottom: 1px solid var(--border-color);
+}
+
+.faq-item:last-child {
+    margin-bottom: 0;
+    padding-bottom: 0;
+    border-bottom: none;
+}
+
+.faq-item h3 {
+    color: var(--primary-color);
+    font-size: 1.2rem;
+    margin-bottom: 10px;
+    font-weight: 600;
+}
+
+.faq-item p {
+    color: var(--text-secondary);
+    line-height: 1.6;
+    margin-bottom: 10px;
+}
+
+.faq-item ul {
+    margin-left: 20px;
+    margin-top: 10px;
+    color: var(--text-secondary);
+}
+
+.faq-item ul li {
+    margin-bottom: 8px;
+    line-height: 1.6;
+}
+
+.faq-item a {
+    color: var(--secondary-color);
+    text-decoration: none;
+}
+
+.faq-item a:hover {
     text-decoration: underline;
 }
 
@@ -1453,22 +1607,74 @@ footer {
 }
 
 .footer-content {
-    display: flex;
-    justify-content: space-between;
-    align-items: center;
     max-width: 1200px;
     margin: 0 auto;
-    padding: 20px;
+    padding: 20px 20px 10px 20px;
 }
 
 .footer-info {
-    flex: 1;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    text-align: center;
 }
 
-.footer-controls {
+.footer-row {
+    width: 100%;
+    margin: 5px 0;
+}
+
+.footer-row p {
+    margin: 0;
+}
+
+.footer-social {
+    display: flex;
+    justify-content: center;
+    align-items: center;
+    gap: 30px;
+}
+
+.social-item {
     display: flex;
     align-items: center;
-    gap: 15px;
+}
+
+.social-icon {
+    color: var(--text-secondary);
+    transition: color 0.2s ease, transform 0.2s ease;
+    display: flex;
+    align-items: center;
+    gap: 8px;
+}
+
+.social-icon:hover {
+    color: var(--secondary-color);
+    transform: translateY(-2px);
+    text-decoration: none;
+}
+
+.social-icon span {
+    font-size: 0.9rem;
+}
+
+.footer-version {
+    color: var(--text-secondary);
+    font-size: 0.9rem;
+    text-decoration: none;
+    transition: color 0.2s ease;
+}
+
+.footer-version:hover {
+    color: var(--secondary-color);
+    text-decoration: underline;
+}
+
+.footer-bottom {
+    padding: 10px 20px 20px 20px;
+    text-align: center;
+    border-top: 1px solid var(--border-color);
+    margin-top: 10px;
 }
 
 .dashboard-toggle {
@@ -2099,9 +2305,11 @@ footer {
     }
     
     .footer-content {
-        flex-direction: column;
-        gap: 15px;
-        text-align: center;
+        padding: 15px 15px 10px 15px;
+    }
+    
+    .footer-bottom {
+        padding: 10px 15px 15px 15px;
     }
     
     .dashboard-mode .footer-content {

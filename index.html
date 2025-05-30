@@ -23,6 +23,7 @@
             <button class="nav-btn active" data-page="duties">My Duties</button>
             <button class="nav-btn" data-page="network">Network Overview</button>
             <button class="nav-btn" data-page="settings">Settings</button>
+            <button class="nav-btn" data-page="faq">FAQ</button>
         </nav>
 
         <!-- My Duties Page -->
@@ -131,27 +132,83 @@
 
             <section class="notifications-section">
             <h2>Notifications</h2>
-            <div class="notification-options">
-                <div class="notification-type">
-                    <h3>Browser Notifications</h3>
-                    <button id="enableBrowserNotifications" class="btn-primary">Enable Browser Notifications</button>
-                    <p class="notification-status" id="browserNotificationStatus"></p>
-                </div>
-                
-                <div class="notification-type">
+            <div class="notification-grid-2x2">
+                <!-- Top Row: Platform Setup -->
+                <div class="grid-cell telegram-setup">
                     <h3>Telegram Notifications</h3>
                     <div class="form-group">
                         <label for="telegramChatId">Telegram Chat ID:</label>
                         <input type="text" id="telegramChatId" placeholder="Enter your chat ID">
                         <small>Start a chat with <a href="https://t.me/EthDuties_bot" target="_blank">@EthDuties_bot</a> and send /start to get your chat ID</small>
                     </div>
-                    <button id="enableTelegramNotifications" class="btn-primary">Enable Telegram Notifications</button>
+                    <button id="enableTelegramNotifications" class="btn-primary">Enable Telegram</button>
                     <button id="updateTelegramSubscription" class="btn-secondary" style="display: none;">Update Subscription</button>
                     <p class="notification-status" id="telegramNotificationStatus"></p>
                 </div>
                 
-                <div class="notification-settings">
-                    <h3>Notification Settings</h3>
+                <div class="grid-cell desktop-setup">
+                    <h3>Desktop Notifications</h3>
+                    <div class="platform-controls">
+                        <button id="enableBrowserNotifications" class="btn-primary">Enable Desktop</button>
+                        <button id="testBrowserNotification" class="btn-secondary" style="display: none;">Test Notification</button>
+                    </div>
+                    <div class="desktop-options">
+                        <div class="form-group">
+                            <label>
+                                <input type="checkbox" id="desktopSound" checked>
+                                Play sound with notifications
+                            </label>
+                        </div>
+                        <div class="form-group">
+                            <label>
+                                <input type="checkbox" id="desktopPersistent" checked>
+                                Keep notifications on screen until dismissed
+                            </label>
+                        </div>
+                    </div>
+                    <p class="notification-status" id="browserNotificationStatus"></p>
+                </div>
+                
+                <!-- Bottom Row: Duty Settings -->
+                <div class="grid-cell telegram-duties">
+                    <h3>Telegram Duty Settings</h3>
+                    <div class="form-group">
+                        <label>
+                            <input type="checkbox" id="notifyProposerTelegram" checked>
+                            Notify for proposer duties
+                        </label>
+                    </div>
+                    <div class="form-group">
+                        <label>
+                            <input type="checkbox" id="notifyAttesterTelegram" checked>
+                            Notify for attester duties
+                        </label>
+                    </div>
+                    <div class="form-group">
+                        <label>
+                            <input type="checkbox" id="notifySyncTelegram" checked>
+                            Notify for sync committee duties
+                        </label>
+                    </div>
+                    <div class="form-group">
+                        <label class="disabled-option">
+                            <input type="checkbox" id="notifyMissedTelegram" disabled>
+                            Notify for missed attestations (Coming Soon)
+                        </label>
+                    </div>
+                    <div class="form-group">
+                        <label for="notifyMinutesTelegram">Notify when duty is within:</label>
+                        <select id="notifyMinutesTelegram">
+                            <option value="5">5 minutes</option>
+                            <option value="10" selected>10 minutes</option>
+                            <option value="30">30 minutes</option>
+                            <option value="60">1 hour</option>
+                        </select>
+                    </div>
+                </div>
+                
+                <div class="grid-cell desktop-duties">
+                    <h3>Desktop Duty Settings</h3>
                     <div class="form-group">
                         <label>
                             <input type="checkbox" id="notifyProposer" checked>
@@ -188,6 +245,91 @@
                 </div>
             </div>
         </section>
+        </div>
+        
+        <!-- FAQ Page -->
+        <div id="faqPage" class="page">
+            <section class="faq-section">
+                <h2>Frequently Asked Questions</h2>
+                
+                <div class="faq-item">
+                    <h3>What is ETH Duties Tracker?</h3>
+                    <p>ETH Duties Tracker is a web application that helps Ethereum validators monitor their upcoming duties including block proposals, attestations, and sync committee participation. It provides real-time notifications and a dashboard view of all validator activities.</p>
+                </div>
+                
+                <div class="faq-item">
+                    <h3>How do I add my validators?</h3>
+                    <p>You can add validators by entering either their validator index (e.g., 123456) or public key (0x...) in the "Add Validators" section. You can also add multiple validators at once by separating them with commas, or import them from a JSON file.</p>
+                </div>
+                
+                <div class="faq-item">
+                    <h3>What types of duties are tracked?</h3>
+                    <p>The tracker monitors three types of validator duties:</p>
+                    <ul>
+                        <li><strong>Proposer Duties:</strong> When your validator is selected to propose a block</li>
+                        <li><strong>Attester Duties:</strong> Regular attestation duties that happen every epoch</li>
+                        <li><strong>Sync Committee:</strong> Special duties when your validator is part of the sync committee</li>
+                    </ul>
+                </div>
+                
+                <div class="faq-item">
+                    <h3>How do notifications work?</h3>
+                    <p>ETH Duties Tracker supports two types of notifications:</p>
+                    <ul>
+                        <li><strong>Desktop Notifications:</strong> Browser-based notifications that appear on your desktop when duties are approaching</li>
+                        <li><strong>Telegram Notifications:</strong> Get alerts sent directly to your Telegram messenger</li>
+                    </ul>
+                    <p>You can configure when to receive notifications (5 minutes to 1 hour before duties) and which types of duties to be notified about.</p>
+                </div>
+                
+                <div class="faq-item">
+                    <h3>How do I set up Telegram notifications?</h3>
+                    <p>1. Start a chat with <a href="https://t.me/EthDuties_bot" target="_blank">@EthDuties_bot</a><br>
+                       2. Send /start to get your chat ID<br>
+                       3. Enter your chat ID in the Settings page<br>
+                       4. Click "Enable Telegram Notifications"</p>
+                </div>
+                
+                <div class="faq-item">
+                    <h3>What is Dashboard Mode?</h3>
+                    <p>Dashboard Mode provides a full-screen, real-time view of your validators, upcoming duties, network status, and recent blocks. It's perfect for displaying on a dedicated monitor or TV screen. Access it by clicking the "Dashboard Mode" button at the bottom of the page.</p>
+                </div>
+                
+                <div class="faq-item">
+                    <h3>Can I use a public beacon node?</h3>
+                    <p>Yes! The app comes with several public beacon nodes pre-configured. You can select one from the dropdown in Settings, or enter your own beacon node URL if you're running a local node. Note that public nodes may have rate limits.</p>
+                </div>
+                
+                <div class="faq-item">
+                    <h3>How do I customize validator labels?</h3>
+                    <p>Click on any validator's public key (the shortened address like "0x1234...abcd") to edit its label. You can give your validators meaningful names like "Main Validator" or "Node 1" to easily identify them.</p>
+                </div>
+                
+                <div class="faq-item">
+                    <h3>Is my data stored securely?</h3>
+                    <p>All data is stored locally in your browser's session storage. No validator information is sent to external servers except for the beacon node queries and optional notification services. The data is cleared when you close your browser session.</p>
+                </div>
+                
+                <div class="faq-item">
+                    <h3>What do the duty countdown colors mean?</h3>
+                    <p>The countdown timers use colors to indicate urgency:</p>
+                    <ul>
+                        <li><span style="color: #ef4444;">Red:</span> Less than 1 minute (critical)</li>
+                        <li><span style="color: #f59e0b;">Orange:</span> 1-5 minutes (urgent)</li>
+                        <li><span style="color: #3b82f6;">Blue:</span> More than 5 minutes (normal)</li>
+                    </ul>
+                </div>
+                
+                <div class="faq-item">
+                    <h3>Can I export/import my validator list?</h3>
+                    <p>Yes! Use the Export button to save your validator list as a JSON file, and Import to load validators from a previously exported file. This is useful for backing up your configuration or sharing it between devices.</p>
+                </div>
+                
+                <div class="faq-item">
+                    <h3>Need more help?</h3>
+                    <p>For bug reports, feature requests, or contributions, visit the <a href="https://github.com/shayanb/ethduties" target="_blank">GitHub repository</a>. You can also reach out on Twitter <a href="https://x.com/sbetamc" target="_blank">@sbetamc</a>.</p>
+                </div>
+            </section>
         </div>
 
         <!-- Dashboard Mode Page -->
@@ -269,21 +411,39 @@
         <footer>
             <div class="footer-content">
                 <div class="footer-info">
-                    <p>
-                        Data cached in session storage | 
-                        Inspired by <a href="https://github.com/TobiWo/eth-duties" target="_blank">eth-duties</a>
-                    </p>
-                    <p>
-                        <a href="https://x.com/sbetamc" target="_blank">@sbetamc</a> | 
-                        <a href="https://github.com/shayanb" target="_blank">github.com/shayanb</a> | 
-                        <a href="https://github.com/shayanb/ethduties" target="_blank">v1.2.1</a>
-                    </p>
+                    <div class="footer-row">
+                        <p>
+                            Data is stored in your browser session | 
+                            Inspired by <a href="https://github.com/TobiWo/eth-duties" target="_blank">eth-duties</a>
+                        </p>
+                    </div>
+                    <div class="footer-row footer-social">
+                        <div class="social-item">
+                            <a href="https://x.com/sbetamc" target="_blank" title="Twitter" class="social-icon">
+                                <svg width="20" height="20" viewBox="0 0 24 24" fill="currentColor">
+                                    <path d="M18.244 2.25h3.308l-7.227 8.26 8.502 11.24H16.17l-5.214-6.817L4.99 21.75H1.68l7.73-8.835L1.254 2.25H8.08l4.713 6.231zm-1.161 17.52h1.833L7.084 4.126H5.117z"/>
+                                </svg>
+                                <span>sbetamc</span>
+                            </a>
+                        </div>
+                        <div class="social-item">
+                            <a href="https://github.com/shayanb" target="_blank" title="GitHub Profile" class="social-icon">
+                                <svg width="20" height="20" viewBox="0 0 24 24" fill="currentColor">
+                                    <path d="M12 2C6.477 2 2 6.484 2 12.017c0 4.425 2.865 8.18 6.839 9.504.5.092.682-.217.682-.483 0-.237-.008-.868-.013-1.703-2.782.605-3.369-1.343-3.369-1.343-.454-1.158-1.11-1.466-1.11-1.466-.908-.62.069-.608.069-.608 1.003.07 1.531 1.032 1.531 1.032.892 1.53 2.341 1.088 2.91.832.092-.647.35-1.088.636-1.338-2.22-.253-4.555-1.113-4.555-4.951 0-1.093.39-1.988 1.029-2.688-.103-.253-.446-1.272.098-2.65 0 0 .84-.27 2.75 1.026A9.564 9.564 0 0112 6.844c.85.004 1.705.115 2.504.337 1.909-1.296 2.747-1.027 2.747-1.027.546 1.379.202 2.398.1 2.651.64.7 1.028 1.595 1.028 2.688 0 3.848-2.339 4.695-4.566 4.943.359.309.678.92.678 1.855 0 1.338-.012 2.419-.012 2.747 0 .268.18.58.688.482A10.019 10.019 0 0022 12.017C22 6.484 17.522 2 12 2z"/>
+                                </svg>
+                                <span>shayanb</span>
+                            </a>
+                        </div>
+                    </div>
+                    <div class="footer-row">
+                        <a href="https://github.com/shayanb/ethduties" target="_blank" class="footer-version">v1.2.1</a>
+                    </div>
                 </div>
-                <div class="footer-controls">
-                    <button id="dashboardModeToggle" class="dashboard-toggle">
-                        📊 Dashboard Mode
-                    </button>
-                </div>
+            </div>
+            <div class="footer-bottom">
+                <button id="dashboardModeToggle" class="dashboard-toggle">
+                    📊 Dashboard Mode
+                </button>
             </div>
         </footer>
     </div>

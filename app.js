@@ -163,6 +163,13 @@ class ValidatorDutiesTracker {
         document.getElementById('enableTelegramNotifications').addEventListener('click', () => this.enableTelegramNotifications());
         document.getElementById('updateTelegramSubscription').addEventListener('click', () => this.updateTelegramSubscription());
         
+        // Test notification button - will be created dynamically
+        document.addEventListener('click', (e) => {
+            if (e.target.id === 'testBrowserNotification') {
+                this.testBrowserNotification();
+            }
+        });
+        
         // Load and apply notification settings
         this.loadNotificationSettings();
     }
@@ -191,8 +198,8 @@ class ValidatorDutiesTracker {
 
     async enableBrowserNotifications() {
         try {
-            if (!('serviceWorker' in navigator) || !('PushManager' in window)) {
-                throw new Error('Push notifications not supported');
+            if (!('Notification' in window)) {
+                throw new Error('Desktop notifications not supported in this browser');
             }
             
             const permission = await Notification.requestPermission();
@@ -200,44 +207,137 @@ class ValidatorDutiesTracker {
                 throw new Error('Notification permission denied');
             }
             
-            // Register the service worker and wait for it to be ready
-            const registration = await navigator.serviceWorker.register('/sw.js');
-            
-            // Wait for the service worker to be ready
-            await navigator.serviceWorker.ready;
-            
-            // Ensure we have VAPID key
-            if (!this.vapidPublicKey) {
-                throw new Error('VAPID public key not available. Please check server configuration.');
+            // Enable push notifications if available
+            if ('serviceWorker' in navigator && 'PushManager' in window) {
+                try {
+                    // Register the service worker and wait for it to be ready
+                    const registration = await navigator.serviceWorker.register('/sw.js');
+                    
+                    // Wait for the service worker to be ready
+                    await navigator.serviceWorker.ready;
+                    
+                    // Ensure we have VAPID key
+                    if (this.vapidPublicKey) {
+                        // Check if we already have a subscription
+                        let subscription = await registration.pushManager.getSubscription();
+                        
+                        if (!subscription) {
+                            // Create a new subscription
+                            subscription = await registration.pushManager.subscribe({
+                                userVisibleOnly: true,
+                                applicationServerKey: this.urlBase64ToUint8Array(this.vapidPublicKey)
+                            });
+                        }
+                        
+                        this.pushSubscription = subscription;
+                        
+                        await fetch(`${this.serverUrl}/api/notifications/subscribe`, {
+                            method: 'POST',
+                            headers: { 'Content-Type': 'application/json' },
+                            body: JSON.stringify({
+                                subscription,
+                                validators: this.validators.map(v => v.id || v)
+                            })
+                        });
+                    }
+                } catch (pushError) {
+                    console.warn('Push notifications not available, using standard notifications:', pushError);
+                }
             }
             
-            // Check if we already have a subscription
-            let subscription = await registration.pushManager.getSubscription();
-            
-            if (!subscription) {
-                // Create a new subscription
-                subscription = await registration.pushManager.subscribe({
-                    userVisibleOnly: true,
-                    applicationServerKey: this.urlBase64ToUint8Array(this.vapidPublicKey)
-                });
-            }
-            
-            this.pushSubscription = subscription;
-            
-            await fetch(`${this.serverUrl}/api/notifications/subscribe`, {
-                method: 'POST',
-                headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify({
-                    subscription,
-                    validators: this.validators.map(v => v.id || v)
-                })
-            });
-            
-            this.showNotificationStatus('browser', 'Browser notifications enabled', true);
+            this.showNotificationStatus('browser', 'Desktop notifications enabled', true);
             sessionStorage.setItem('browserNotifications', 'true');
+            
+            // Show test button
+            const testBtn = document.getElementById('testBrowserNotification');
+            if (testBtn) testBtn.style.display = 'inline-block';
         } catch (error) {
             console.error('Browser notification error:', error);
             this.showNotificationStatus('browser', error.message, false);
+        }
+    }
+    
+    async testBrowserNotification() {
+        try {
+            // First check if notifications are supported and permitted
+            if (!('Notification' in window)) {
+                this.showNotificationStatus('browser', 'Notifications not supported in this browser', false);
+                return;
+            }
+            
+            if (Notification.permission !== 'granted') {
+                this.showNotificationStatus('browser', 'Notification permission not granted. Please enable desktop notifications first.', false);
+                return;
+            }
+            
+            // Force page to lose focus to ensure notification shows
+            const tempLink = document.createElement('a');
+            tempLink.href = '#';
+            tempLink.style.position = 'absolute';
+            tempLink.style.top = '-9999px';
+            document.body.appendChild(tempLink);
+            tempLink.focus();
+            
+            // Small delay to ensure focus change
+            await new Promise(resolve => setTimeout(resolve, 100));
+            
+            const iconUrl = window.location.origin + '/favicon.ico';
+            const options = {
+                body: 'Desktop notifications are working! You will receive alerts for your validator duties.',
+                icon: iconUrl,
+                badge: iconUrl,
+                tag: 'test-notification-' + Date.now(), // Unique tag
+                requireInteraction: document.getElementById('desktopPersistent')?.checked !== false,
+                vibrate: [200, 100, 200],
+                timestamp: Date.now(),
+                silent: false,
+                renotify: true
+            };
+            
+            console.log('Creating test notification with options:', options);
+            
+            const notification = new Notification('🎉 ETH Duties Test Notification', options);
+            
+            notification.onclick = () => {
+                window.focus();
+                notification.close();
+                document.body.removeChild(tempLink);
+            };
+            
+            notification.onshow = () => {
+                console.log('Test notification shown successfully');
+                this.showNotificationStatus('browser', 'Test notification sent! Check your desktop.', true);
+                setTimeout(() => document.body.removeChild(tempLink), 1000);
+            };
+            
+            notification.onerror = (error) => {
+                console.error('Test notification error:', error);
+                this.showNotificationStatus('browser', 'Failed to show notification. Check browser settings.', false);
+                document.body.removeChild(tempLink);
+            };
+            
+            // Play sound if enabled
+            if (document.getElementById('desktopSound')?.checked !== false) {
+                try {
+                    const audioContext = new (window.AudioContext || window.webkitAudioContext)();
+                    const oscillator = audioContext.createOscillator();
+                    const gainNode = audioContext.createGain();
+                    
+                    oscillator.connect(gainNode);
+                    gainNode.connect(audioContext.destination);
+                    
+                    oscillator.frequency.value = 800;
+                    gainNode.gain.value = 0.1;
+                    
+                    oscillator.start();
+                    oscillator.stop(audioContext.currentTime + 0.1);
+                } catch (soundError) {
+                    console.error('Failed to play test sound:', soundError);
+                }
+            }
+        } catch (error) {
+            console.error('Test notification error:', error);
+            this.showNotificationStatus('browser', `Error: ${error.message}`, false);
         }
     }
 
@@ -765,26 +865,91 @@ class ValidatorDutiesTracker {
             console.log('Telegram notification not sent - conditions not met');
         }
         
-        // Send browser notification
-        if (browserEnabled && this.pushSubscription) {
-            try {
-                await fetch(`${this.serverUrl}/api/notify`, {
-                    method: 'POST',
-                    headers: { 'Content-Type': 'application/json' },
-                    body: JSON.stringify({
-                        type: 'Block Confirmed',
-                        validator: validator,
-                        validatorDisplay,
-                        duty: {
-                            slot: slot,
-                            timeUntil: 'confirmed',
-                            blockDetails: details
-                        },
-                        urgency: 'success'
-                    })
-                });
-            } catch (error) {
-                console.error('Error sending browser block details notification:', error);
+        // Send desktop notification
+        if (browserEnabled) {
+            // Get validator label for display
+            const validatorLabel = this.getValidatorLabel(validator);
+            let displayName = validatorLabel;
+            if (proposerDuty && proposerDuty.pubkey) {
+                displayName = `${validatorLabel} (${proposerDuty.pubkey.slice(0, 10)}...)`;
+            }
+            
+            const title = '🎉💰 BLOCK CONFIRMED! 🎉💰';
+            const body = `${displayName} - ${details.totalReward.toFixed(3)} ETH earned! (${details.txCount} txs)`;
+            
+            // Show desktop notification
+            if ('Notification' in window && Notification.permission === 'granted') {
+                try {
+                    const iconUrl = window.location.origin + '/favicon.ico';
+                    const notification = new Notification(title, {
+                        body: body,
+                        icon: iconUrl,
+                        badge: iconUrl,
+                        tag: `block-${slot}`,
+                        requireInteraction: document.getElementById('desktopPersistent')?.checked !== false,
+                        vibrate: [200, 100, 200, 100, 200],
+                        timestamp: Date.now(),
+                        silent: false,
+                        renotify: true
+                    });
+                    
+                    notification.onclick = () => {
+                        window.open(`https://beaconcha.in/slot/${slot}`, '_blank');
+                        notification.close();
+                    };
+                    
+                    notification.onshow = () => {
+                        console.log('Block confirmation desktop notification shown');
+                    };
+                    
+                    // Play sound if enabled
+                    if (document.getElementById('desktopSound')?.checked !== false) {
+                        try {
+                            const audioContext = new (window.AudioContext || window.webkitAudioContext)();
+                            const oscillator = audioContext.createOscillator();
+                            const gainNode = audioContext.createGain();
+                            
+                            oscillator.connect(gainNode);
+                            gainNode.connect(audioContext.destination);
+                            
+                            // Celebration sound - ascending tones
+                            oscillator.frequency.setValueAtTime(600, audioContext.currentTime);
+                            oscillator.frequency.linearRampToValueAtTime(800, audioContext.currentTime + 0.1);
+                            oscillator.frequency.linearRampToValueAtTime(1000, audioContext.currentTime + 0.2);
+                            gainNode.gain.value = 0.1;
+                            
+                            oscillator.start();
+                            oscillator.stop(audioContext.currentTime + 0.3);
+                        } catch (soundError) {
+                            console.error('Failed to play block confirmation sound:', soundError);
+                        }
+                    }
+                } catch (notifError) {
+                    console.error('Failed to create block notification:', notifError);
+                }
+            }
+            
+            // Also send push notification if available
+            if (this.pushSubscription) {
+                try {
+                    await fetch(`${this.serverUrl}/api/notify`, {
+                        method: 'POST',
+                        headers: { 'Content-Type': 'application/json' },
+                        body: JSON.stringify({
+                            type: 'Block Confirmed',
+                            validator: validator,
+                            validatorDisplay,
+                            duty: {
+                                slot: slot,
+                                timeUntil: 'confirmed',
+                                blockDetails: details
+                            },
+                            urgency: 'success'
+                        })
+                    });
+                } catch (error) {
+                    console.error('Error sending push notification for block:', error);
+                }
             }
         }
     }
@@ -915,33 +1080,132 @@ class ValidatorDutiesTracker {
             
             // Send browser notification if enabled
             const browserEnabled = sessionStorage.getItem('browserNotifications') === 'true';
-            if (browserEnabled && this.pushSubscription) {
+            if (browserEnabled) {
                 try {
                     console.log('Sending browser notification for validator:', validator);
                     
-                    // Format validator display similar to Telegram
-                    let validatorDisplay = validator;
+                    // Format validator display
+                    const validatorLabel = this.getValidatorLabel(validator);
+                    let validatorDisplay = validatorLabel;
                     if (duty.pubkey) {
-                        validatorDisplay = `${validator} (${duty.pubkey.slice(0, 10)})`;
+                        validatorDisplay = `${validatorLabel} (${duty.pubkey.slice(0, 10)}...)`;
                     }
                     
-                    const response = await fetch(`${this.serverUrl}/api/notify`, {
-                        method: 'POST',
-                        headers: { 'Content-Type': 'application/json' },
-                        body: JSON.stringify({
-                            type,
-                            validator: validator, // Send the raw index, not the label
-                            validatorDisplay, // Send the formatted display
-                            duty: {
-                                slot: duty.slot,
-                                timeUntil: this.formatTimeUntil(timeUntil)
-                            },
-                            urgency
-                        })
-                    });
+                    // Create notification title and body
+                    let title, body;
+                    if (type === 'Proposer') {
+                        title = '🎉💰 BLOCK PROPOSAL! 🎉💰';
+                        body = `Validator ${validatorDisplay} - ${this.formatTimeUntil(timeUntil)}`;
+                    } else if (type === 'Attester') {
+                        title = '📝 Attestation Duty';
+                        body = `Validator ${validatorDisplay} - ${this.formatTimeUntil(timeUntil)}`;
+                    } else if (type === 'Sync Committee') {
+                        title = '🔐💎 SYNC COMMITTEE 💎🔐';
+                        body = `Validator ${validatorDisplay} - Active now`;
+                    } else if (type === 'Next Sync Committee') {
+                        title = '🔮💎 NEXT SYNC COMMITTEE 💎🔮';
+                        body = `Validator ${validatorDisplay} - Starting ${this.formatTimeUntil(timeUntil)}`;
+                    } else {
+                        title = `${type} Duty`;
+                        body = `Validator ${validatorDisplay} - ${this.formatTimeUntil(timeUntil)}`;
+                    }
                     
-                    if (!response.ok) {
-                        console.error('Browser notification response not ok:', await response.text());
+                    // Show desktop notification
+                    if ('Notification' in window && Notification.permission === 'granted') {
+                        console.log('Creating desktop notification:', { 
+                            title, 
+                            body,
+                            isFocused: document.hasFocus(),
+                            visibility: document.visibilityState
+                        });
+                        
+                        try {
+                            // Use absolute URL for icon
+                            const iconUrl = window.location.origin + '/favicon.ico';
+                            
+                            // Create notification immediately
+                            const showNotification = () => {
+                                const notification = new Notification(title, {
+                                    body: body,
+                                    icon: iconUrl,
+                                    badge: iconUrl,
+                                    tag: dutyKey,
+                                    requireInteraction: document.getElementById('desktopPersistent')?.checked !== false,
+                                    vibrate: [200, 100, 200],
+                                    timestamp: Date.now(),
+                                    silent: false,
+                                    renotify: true
+                                });
+                                
+                                notification.onclick = () => {
+                                    window.focus();
+                                    notification.close();
+                                };
+                                
+                                notification.onerror = (error) => {
+                                    console.error('Notification error:', error);
+                                };
+                                
+                                notification.onshow = () => {
+                                    console.log('Desktop notification shown successfully');
+                                };
+                            };
+                            
+                            // Show immediately regardless of focus
+                            showNotification();
+                            
+                        } catch (notifError) {
+                            console.error('Failed to create notification:', notifError);
+                        }
+                        
+                        // Play sound if enabled
+                        if (document.getElementById('desktopSound')?.checked !== false) {
+                            try {
+                                const audioContext = new (window.AudioContext || window.webkitAudioContext)();
+                                const oscillator = audioContext.createOscillator();
+                                const gainNode = audioContext.createGain();
+                                
+                                oscillator.connect(gainNode);
+                                gainNode.connect(audioContext.destination);
+                                
+                                oscillator.frequency.value = urgency === 'critical' ? 1000 : urgency === 'urgent' ? 900 : 800;
+                                gainNode.gain.value = 0.1;
+                                
+                                oscillator.start();
+                                oscillator.stop(audioContext.currentTime + (urgency === 'critical' ? 0.3 : 0.1));
+                                
+                                console.log('Notification sound played');
+                            } catch (soundError) {
+                                console.error('Failed to play sound:', soundError);
+                            }
+                        }
+                    } else {
+                        console.log('Desktop notifications not available or not granted:', {
+                            hasNotification: 'Notification' in window,
+                            permission: Notification.permission
+                        });
+                    }
+                    
+                    // Also send push notification if available
+                    if (this.pushSubscription) {
+                        const response = await fetch(`${this.serverUrl}/api/notify`, {
+                            method: 'POST',
+                            headers: { 'Content-Type': 'application/json' },
+                            body: JSON.stringify({
+                                type,
+                                validator: validator,
+                                validatorDisplay,
+                                duty: {
+                                    slot: duty.slot,
+                                    timeUntil: this.formatTimeUntil(timeUntil)
+                                },
+                                urgency
+                            })
+                        });
+                        
+                        if (!response.ok) {
+                            console.error('Push notification response not ok:', await response.text());
+                        }
                     }
                 } catch (error) {
                     console.error('Browser notification error:', error);
@@ -1410,7 +1674,12 @@ class ValidatorDutiesTracker {
             // Since we now always store indices, all validators should be indices
             let indexDisplay = `<a href="https://beaconcha.in/validator/${validatorId}" target="_blank" class="validator-index-link" title="Click to view on Beaconcha.in">
                 <span class="validator-label-display">${displayLabel}</span>
-                <input type="text" class="validator-label-edit" style="display: none;" value="${displayLabel}" onblur="app.saveValidatorLabel('${validatorId}', this.value)" onkeypress="if(event.key==='Enter') this.blur()" onclick="event.stopPropagation();">
+                <input type="text" class="validator-label-edit" style="display: none;" value="${displayLabel}" 
+                    onblur="app.saveValidatorLabel('${validatorId}', this.value)" 
+                    onkeypress="if(event.key==='Enter') { event.preventDefault(); this.blur(); }" 
+                    onclick="event.stopPropagation(); event.preventDefault();" 
+                    onmousedown="event.stopPropagation();"
+                    onfocus="event.stopPropagation();">
             </a>`;
             let pubkeyPreview = `<span class="validator-pubkey-preview">Loading...</span>`;
             
@@ -1553,8 +1822,11 @@ class ValidatorDutiesTracker {
             if (labelDisplay && labelInput) {
                 labelDisplay.style.display = 'none';
                 labelInput.style.display = 'inline';
-                labelInput.focus();
-                labelInput.select();
+                // Small delay to ensure the input is visible before focusing
+                setTimeout(() => {
+                    labelInput.focus();
+                    labelInput.select();
+                }, 10);
             }
         }
     }
@@ -2386,6 +2658,10 @@ class ValidatorDutiesTracker {
         
         if (this.duties.sync.length === 0) {
             panel.innerHTML = `
+                <div class="panel-header">
+                    <h3>Current/Next Sync Committee member</h3>
+                    <p class="panel-subtitle">Sync Committee</p>
+                </div>
                 <div style="text-align: center; padding: 20px;">
                     <p style="color: var(--text-secondary); margin-bottom: 10px;">No sync committee duties found for your validators</p>
                     <p style="color: var(--text-secondary); font-size: 0.9rem;">Sync committees are selected every ~27 hours</p>
@@ -2395,7 +2671,7 @@ class ValidatorDutiesTracker {
         }
         
         const currentEpoch = Math.floor(this.getCurrentSlotSync() / 32);
-        const html = this.duties.sync.map(duty => {
+        const dutyHtml = this.duties.sync.map(duty => {
             let dutyInfo = '';
             let timeDisplay = '';
             
@@ -2431,6 +2707,14 @@ class ValidatorDutiesTracker {
                 </div>
             `;
         }).join('');
+        
+        const html = `
+            <div class="panel-header">
+                <h3>Current/Next Sync Committee member</h3>
+                <p class="panel-subtitle">Sync Committee</p>
+            </div>
+            ${dutyHtml}
+        `;
         
         panel.innerHTML = html;
     }
@@ -2724,7 +3008,9 @@ class ValidatorDutiesTracker {
             notifyAttester: sessionStorage.getItem('notifyAttester') !== 'false',
             notifySync: sessionStorage.getItem('notifySync') !== 'false',
             notifyMissed: sessionStorage.getItem('notifyMissed') === 'true', // Default to false
-            notifyMinutes: sessionStorage.getItem('notifyMinutes') || '10'
+            notifyMinutes: sessionStorage.getItem('notifyMinutes') || '10',
+            desktopSound: sessionStorage.getItem('desktopSound') !== 'false',
+            desktopPersistent: sessionStorage.getItem('desktopPersistent') !== 'false'
         };
         
         // Apply settings to UI
@@ -2734,6 +3020,18 @@ class ValidatorDutiesTracker {
         document.getElementById('notifyMissed').checked = settings.notifyMissed;
         document.getElementById('notifyMinutes').value = settings.notifyMinutes;
         
+        // Apply desktop settings if elements exist
+        if (document.getElementById('desktopSound')) {
+            document.getElementById('desktopSound').checked = settings.desktopSound;
+            document.getElementById('desktopPersistent').checked = settings.desktopPersistent;
+        }
+        
+        // Check if browser notifications are enabled and show settings
+        if (sessionStorage.getItem('browserNotifications') === 'true') {
+            const testBtn = document.getElementById('testBrowserNotification');
+            if (testBtn) testBtn.style.display = 'inline-block';
+        }
+        
         // Save settings on change
         ['notifyProposer', 'notifyAttester', 'notifySync'].forEach(id => {
             document.getElementById(id).addEventListener('change', (e) => {
@@ -2742,12 +3040,48 @@ class ValidatorDutiesTracker {
             });
         });
         
+        // Save desktop settings on change
+        ['desktopSound', 'desktopPersistent'].forEach(id => {
+            if (document.getElementById(id)) {
+                document.getElementById(id).addEventListener('change', (e) => {
+                    sessionStorage.setItem(id, e.target.checked);
+                });
+            }
+        });
+        
         // Don't add event listener for disabled notifyMissed checkbox
         
         document.getElementById('notifyMinutes').addEventListener('change', (e) => {
             sessionStorage.setItem('notifyMinutes', e.target.value);
             this.sendNotificationSettingsUpdate();
         });
+        
+        // Also add event listeners for Telegram settings
+        ['notifyProposerTelegram', 'notifyAttesterTelegram', 'notifySyncTelegram'].forEach(id => {
+            const elem = document.getElementById(id);
+            if (elem) {
+                elem.addEventListener('change', (e) => {
+                    const baseId = id.replace('Telegram', '');
+                    sessionStorage.setItem(baseId, e.target.checked);
+                    this.sendNotificationSettingsUpdate();
+                });
+                // Sync initial state with regular settings
+                const baseId = id.replace('Telegram', '');
+                elem.checked = sessionStorage.getItem(baseId) !== 'false';
+            }
+        });
+        
+        const telegramMinutesElem = document.getElementById('notifyMinutesTelegram');
+        if (telegramMinutesElem) {
+            telegramMinutesElem.addEventListener('change', (e) => {
+                sessionStorage.setItem('notifyMinutes', e.target.value);
+                // Sync both dropdowns
+                document.getElementById('notifyMinutes').value = e.target.value;
+                this.sendNotificationSettingsUpdate();
+            });
+            // Sync initial value
+            telegramMinutesElem.value = settings.notifyMinutes;
+        }
     }
 
     cacheDuties() {
