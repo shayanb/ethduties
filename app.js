@@ -2731,11 +2731,12 @@ class ValidatorDutiesTracker {
         const timeElapsed = epochsElapsed * 32 * 12 * 1000; // epochs * slots * seconds * ms
         
         // Count tracked validators in sync committees
+        const validatorIds = this.validators.map(v => v.id || v);
         const trackedInCurrent = this.networkOverview.currentSyncCommittee.filter(v => 
-            this.validators.includes(v) || this.validators.includes(v.toString())
+            validatorIds.includes(v) || validatorIds.includes(v.toString())
         );
         const trackedInNext = this.networkOverview.nextSyncCommittee.filter(v => 
-            this.validators.includes(v) || this.validators.includes(v.toString())
+            validatorIds.includes(v) || validatorIds.includes(v.toString())
         );
         
         let html = `
@@ -2962,7 +2963,7 @@ class ValidatorDutiesTracker {
         `;
         
         validators.forEach(validatorIndex => {
-            const isTracked = this.validators.includes(validatorIndex.toString());
+            const isTracked = this.validators.some(v => (v.id || v) === validatorIndex.toString());
             const color = isTracked ? this.getValidatorColor(validatorIndex.toString()) : '#6b7280';
             
             html += `

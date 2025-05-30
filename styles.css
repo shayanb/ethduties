@@ -72,12 +72,25 @@ header {
 /* Navigation */
 .main-nav {
     display: flex;
+    justify-content: space-between;
+    align-items: center;
     gap: 10px;
     margin-bottom: 30px;
     background: var(--card-bg);
     padding: 10px;
     border-radius: 12px;
     box-shadow: 0 1px 3px rgba(0, 0, 0, 0.1);
+}
+
+.nav-left {
+    display: flex;
+    gap: 10px;
+    flex: 1;
+}
+
+.nav-right {
+    display: flex;
+    align-items: center;
 }
 
 .nav-btn {
@@ -2900,4 +2913,126 @@ footer {
 
 [data-theme="dark"] .error-content {
     color: #f87171;
+}
+
+/* Footer version row */
+.footer-version-row {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    gap: 5px;
+}
+
+/* Dashboard view dark mode styles */
+[data-theme="dark"] .dashboard-metrics {
+    background-color: var(--card-bg);
+    border: 1px solid var(--border-color);
+}
+
+[data-theme="dark"] .metric-item {
+    background-color: var(--bg-color);
+    border: 1px solid var(--border-color);
+}
+
+[data-theme="dark"] .metric-title {
+    color: var(--text-secondary);
+}
+
+[data-theme="dark"] .metric-value {
+    color: var(--text-primary);
+}
+
+[data-theme="dark"] .dashboard-overview {
+    background-color: var(--card-bg);
+    border: 1px solid var(--border-color);
+}
+
+[data-theme="dark"] .dashboard-panel {
+    background-color: var(--bg-color);
+    border: 1px solid var(--border-color);
+}
+
+[data-theme="dark"] .panel-header {
+    background-color: var(--card-bg);
+    border-bottom: 1px solid var(--border-color);
+    color: var(--text-primary);
+}
+
+[data-theme="dark"] .panel-content {
+    background-color: var(--bg-color);
+    color: var(--text-primary);
+}
+
+[data-theme="dark"] .network-metrics-grid {
+    background-color: var(--bg-color);
+}
+
+[data-theme="dark"] .dashboard-duties {
+    background-color: var(--card-bg);
+    border: 1px solid var(--border-color);
+}
+
+[data-theme="dark"] .upcoming-duties {
+    background-color: var(--bg-color);
+}
+
+[data-theme="dark"] .dashboard-duty-item {
+    background-color: var(--card-bg);
+    border: 1px solid var(--border-color);
+}
+
+[data-theme="dark"] .duty-countdown {
+    color: var(--text-secondary);
+}
+
+[data-theme="dark"] .dashboard-sync-committee {
+    background-color: var(--card-bg);
+    border: 1px solid var(--border-color);
+}
+
+[data-theme="dark"] .sync-committee-summary {
+    background-color: var(--bg-color);
+}
+
+[data-theme="dark"] .sync-summary-item {
+    background-color: var(--card-bg);
+    border: 1px solid var(--border-color);
+    color: var(--text-primary);
+}
+
+[data-theme="dark"] .sync-summary-item:hover {
+    background-color: var(--bg-color);
+    border-color: var(--secondary-color);
+}
+
+[data-theme="dark"] .sync-summary-header {
+    color: var(--text-primary);
+}
+
+[data-theme="dark"] .sync-summary-content {
+    color: var(--text-secondary);
+}
+
+[data-theme="dark"] .validator-count-tag {
+    background-color: var(--secondary-color);
+    color: white;
+}
+
+[data-theme="dark"] .dashboard-page {
+    background-color: var(--bg-color);
+    color: var(--text-primary);
+}
+
+[data-theme="dark"] .dashboard-header {
+    background-color: var(--card-bg);
+    border-bottom: 1px solid var(--border-color);
+}
+
+[data-theme="dark"] .dashboard-exit-btn {
+    background-color: var(--error-color);
+    border: 1px solid #dc2626;
+}
+
+[data-theme="dark"] .dashboard-exit-btn:hover {
+    background-color: #dc2626;
 }
