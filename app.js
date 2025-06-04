@@ -52,6 +52,7 @@ class ValidatorDutiesTracker {
         this.loadCachedDuties();
         this.initializeNotifications();
         this.initializeDashboard();
+        this.initializeDarkMode();
         this.startCountdownTimer();
     }
 
@@ -149,6 +150,9 @@ class ValidatorDutiesTracker {
         // Dashboard mode toggle
         document.getElementById('dashboardModeToggle').addEventListener('click', () => this.toggleDashboardMode());
         
+        // Dark mode toggle
+        document.getElementById('darkModeToggle').addEventListener('click', () => this.toggleDarkMode());
+        
         // Dashboard exit button
         document.getElementById('dashboardExitBtn').addEventListener('click', () => this.exitDashboardMode());
         
@@ -162,6 +166,13 @@ class ValidatorDutiesTracker {
         document.getElementById('enableBrowserNotifications').addEventListener('click', () => this.enableBrowserNotifications());
         document.getElementById('enableTelegramNotifications').addEventListener('click', () => this.enableTelegramNotifications());
         document.getElementById('updateTelegramSubscription').addEventListener('click', () => this.updateTelegramSubscription());
+        
+        // Test notification button - will be created dynamically
+        document.addEventListener('click', (e) => {
+            if (e.target.id === 'testBrowserNotification') {
+                this.testBrowserNotification();
+            }
+        });
         
         // Load and apply notification settings
         this.loadNotificationSettings();
@@ -191,8 +202,8 @@ class ValidatorDutiesTracker {
 
     async enableBrowserNotifications() {
         try {
-            if (!('serviceWorker' in navigator) || !('PushManager' in window)) {
-                throw new Error('Push notifications not supported');
+            if (!('Notification' in window)) {
+                throw new Error('Desktop notifications not supported in this browser');
             }
             
             const permission = await Notification.requestPermission();
@@ -200,44 +211,122 @@ class ValidatorDutiesTracker {
                 throw new Error('Notification permission denied');
             }
             
-            // Register the service worker and wait for it to be ready
-            const registration = await navigator.serviceWorker.register('/sw.js');
-            
-            // Wait for the service worker to be ready
-            await navigator.serviceWorker.ready;
-            
-            // Ensure we have VAPID key
-            if (!this.vapidPublicKey) {
-                throw new Error('VAPID public key not available. Please check server configuration.');
+            // Enable push notifications if available
+            if ('serviceWorker' in navigator && 'PushManager' in window) {
+                try {
+                    // Register the service worker and wait for it to be ready
+                    const registration = await navigator.serviceWorker.register('/sw.js');
+                    
+                    // Wait for the service worker to be ready
+                    await navigator.serviceWorker.ready;
+                    
+                    // Ensure we have VAPID key
+                    if (this.vapidPublicKey) {
+                        // Check if we already have a subscription
+                        let subscription = await registration.pushManager.getSubscription();
+                        
+                        if (!subscription) {
+                            // Create a new subscription
+                            subscription = await registration.pushManager.subscribe({
+                                userVisibleOnly: true,
+                                applicationServerKey: this.urlBase64ToUint8Array(this.vapidPublicKey)
+                            });
+                        }
+                        
+                        this.pushSubscription = subscription;
+                        
+                        await fetch(`${this.serverUrl}/api/notifications/subscribe`, {
+                            method: 'POST',
+                            headers: { 'Content-Type': 'application/json' },
+                            body: JSON.stringify({
+                                subscription,
+                                validators: this.validators.map(v => v.id || v)
+                            })
+                        });
+                    }
+                } catch (pushError) {
+                    console.warn('Push notifications not available, using standard notifications:', pushError);
+                }
             }
             
-            // Check if we already have a subscription
-            let subscription = await registration.pushManager.getSubscription();
-            
-            if (!subscription) {
-                // Create a new subscription
-                subscription = await registration.pushManager.subscribe({
-                    userVisibleOnly: true,
-                    applicationServerKey: this.urlBase64ToUint8Array(this.vapidPublicKey)
-                });
-            }
-            
-            this.pushSubscription = subscription;
-            
-            await fetch(`${this.serverUrl}/api/notifications/subscribe`, {
-                method: 'POST',
-                headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify({
-                    subscription,
-                    validators: this.validators.map(v => v.id || v)
-                })
-            });
-            
-            this.showNotificationStatus('browser', 'Browser notifications enabled', true);
+            this.showNotificationStatus('browser', 'Desktop notifications enabled', true);
             sessionStorage.setItem('browserNotifications', 'true');
+            
+            // Show test button
+            const testBtn = document.getElementById('testBrowserNotification');
+            if (testBtn) testBtn.style.display = 'inline-block';
         } catch (error) {
             console.error('Browser notification error:', error);
             this.showNotificationStatus('browser', error.message, false);
+        }
+    }
+    
+    async testBrowserNotification() {
+        try {
+            if (!('Notification' in window)) {
+                this.showNotificationStatus('browser', 'Notifications not supported in this browser', false);
+                return;
+            }
+            
+            if (Notification.permission !== 'granted') {
+                this.showNotificationStatus('browser', 'Notification permission not granted. Please enable desktop notifications first.', false);
+                return;
+            }
+            
+            const iconUrl = window.location.origin + '/favicon.ico';
+            const notification = new Notification('🎉 ETH Duties Test Notification', {
+                body: 'Desktop notifications are working! You will receive alerts for your validator duties.',
+                icon: iconUrl,
+                badge: iconUrl,
+                tag: 'test-notification-' + Date.now(),
+                requireInteraction: document.getElementById('desktopPersistent')?.checked !== false,
+                vibrate: [200, 100, 200],
+                silent: false,
+                renotify: true
+            });
+            
+            notification.onclick = () => {
+                window.focus();
+                notification.close();
+            };
+            
+            notification.onshow = () => {
+                this.showNotificationStatus('browser', 'Test notification sent! Check your desktop.', true);
+            };
+            
+            notification.onerror = (error) => {
+                console.error('Test notification error:', error);
+                this.showNotificationStatus('browser', 'Failed to show notification. Check browser settings.', false);
+            };
+            
+            // Play sound if enabled
+            if (document.getElementById('desktopSound')?.checked !== false) {
+                try {
+                    const audioContext = new (window.AudioContext || window.webkitAudioContext)();
+                    const oscillator = audioContext.createOscillator();
+                    const gainNode = audioContext.createGain();
+                    
+                    oscillator.connect(gainNode);
+                    gainNode.connect(audioContext.destination);
+                    
+                    // Retro test sound - short blip
+                    oscillator.type = 'square';
+                    oscillator.frequency.value = 392; // G4 note
+                    
+                    // Subtle volume with envelope
+                    gainNode.gain.setValueAtTime(0, audioContext.currentTime);
+                    gainNode.gain.linearRampToValueAtTime(0.03, audioContext.currentTime + 0.01);
+                    gainNode.gain.exponentialRampToValueAtTime(0.001, audioContext.currentTime + 0.1);
+                    
+                    oscillator.start();
+                    oscillator.stop(audioContext.currentTime + 0.1);
+                } catch (soundError) {
+                    console.error('Failed to play test sound:', soundError);
+                }
+            }
+        } catch (error) {
+            console.error('Test notification error:', error);
+            this.showNotificationStatus('browser', `Error: ${error.message}`, false);
         }
     }
 
@@ -765,26 +854,97 @@ class ValidatorDutiesTracker {
             console.log('Telegram notification not sent - conditions not met');
         }
         
-        // Send browser notification
-        if (browserEnabled && this.pushSubscription) {
-            try {
-                await fetch(`${this.serverUrl}/api/notify`, {
-                    method: 'POST',
-                    headers: { 'Content-Type': 'application/json' },
-                    body: JSON.stringify({
-                        type: 'Block Confirmed',
-                        validator: validator,
-                        validatorDisplay,
-                        duty: {
-                            slot: slot,
-                            timeUntil: 'confirmed',
-                            blockDetails: details
-                        },
-                        urgency: 'success'
-                    })
-                });
-            } catch (error) {
-                console.error('Error sending browser block details notification:', error);
+        // Send desktop notification
+        if (browserEnabled) {
+            // Get validator label for display (without pubkey for concise desktop notifications)
+            const validatorLabel = this.getValidatorLabel(validator);
+            
+            const title = '🎉💰 BLOCK CONFIRMED! 🎉💰';
+            let body = `Validator: ${validatorLabel}\nSlot: ${slot}\n\n${details.totalReward.toFixed(3)} ETH earned!\n${details.txCount} transactions`;
+            
+            // Add graffiti if available
+            if (details.graffiti && details.graffiti.trim()) {
+                body += `\n\nGraffiti: "${details.graffiti.trim()}"`;
+            }
+            
+            // Show desktop notification
+            if ('Notification' in window && Notification.permission === 'granted') {
+                try {
+                    const iconUrl = window.location.origin + '/favicon.ico';
+                    
+                    const notification = new Notification(title, {
+                        body: body,
+                        icon: iconUrl,
+                        badge: iconUrl,
+                        tag: `block-${slot}`,
+                        requireInteraction: document.getElementById('desktopPersistent')?.checked !== false,
+                        vibrate: [200, 100, 200, 100, 200],
+                        silent: false,
+                        renotify: true
+                    });
+                    
+                    notification.onclick = () => {
+                        window.open(`https://beaconcha.in/slot/${slot}`, '_blank');
+                        notification.close();
+                    };
+                    
+                    notification.onerror = (error) => {
+                        console.error('Block notification error:', error);
+                    };
+                    
+                    // Play sound if enabled
+                    if (document.getElementById('desktopSound')?.checked !== false) {
+                        try {
+                            const audioContext = new (window.AudioContext || window.webkitAudioContext)();
+                            const oscillator = audioContext.createOscillator();
+                            const gainNode = audioContext.createGain();
+                            
+                            oscillator.connect(gainNode);
+                            gainNode.connect(audioContext.destination);
+                            
+                            // Retro celebration sound - 8-bit style ascending tones
+                            oscillator.type = 'square'; // 8-bit style waveform
+                            oscillator.frequency.setValueAtTime(440, audioContext.currentTime);
+                            oscillator.frequency.exponentialRampToValueAtTime(659.25, audioContext.currentTime + 0.15);
+                            oscillator.frequency.exponentialRampToValueAtTime(880, audioContext.currentTime + 0.25);
+                            
+                            // Subtle volume with envelope
+                            gainNode.gain.setValueAtTime(0, audioContext.currentTime);
+                            gainNode.gain.linearRampToValueAtTime(0.05, audioContext.currentTime + 0.01);
+                            gainNode.gain.exponentialRampToValueAtTime(0.001, audioContext.currentTime + 0.3);
+                            
+                            oscillator.start();
+                            oscillator.stop(audioContext.currentTime + 0.3);
+                        } catch (soundError) {
+                            console.error('Failed to play block confirmation sound:', soundError);
+                        }
+                    }
+                } catch (notifError) {
+                    console.error('Failed to create block notification:', notifError);
+                }
+            }
+            
+            // Also send push notification if available
+            if (this.pushSubscription) {
+                try {
+                    await fetch(`${this.serverUrl}/api/notify`, {
+                        method: 'POST',
+                        headers: { 'Content-Type': 'application/json' },
+                        body: JSON.stringify({
+                            type: 'Block Confirmed',
+                            validator: validator,
+                            validatorDisplay,
+                            duty: {
+                                slot: slot,
+                                timeUntil: 'confirmed',
+                                blockDetails: details
+                            },
+                            urgency: 'success'
+                        })
+                    });
+                } catch (error) {
+                    console.error('Error sending push notification for block:', error);
+                }
             }
         }
     }
@@ -915,33 +1075,119 @@ class ValidatorDutiesTracker {
             
             // Send browser notification if enabled
             const browserEnabled = sessionStorage.getItem('browserNotifications') === 'true';
-            if (browserEnabled && this.pushSubscription) {
+            if (browserEnabled) {
                 try {
                     console.log('Sending browser notification for validator:', validator);
                     
-                    // Format validator display similar to Telegram
-                    let validatorDisplay = validator;
-                    if (duty.pubkey) {
-                        validatorDisplay = `${validator} (${duty.pubkey.slice(0, 10)})`;
+                    // Format validator display (without pubkey for concise desktop notifications)
+                    const validatorLabel = this.getValidatorLabel(validator);
+                    
+                    // Create notification title and body using Telegram format but without pubkey
+                    let title, body;
+                    if (type === 'Proposer') {
+                        title = '🎉💰 BLOCK PROPOSAL! 🎉💰';
+                        body = `In ${minutesUntil} minute${minutesUntil === 1 ? '' : 's'}\n\nValidator: ${validatorLabel}\nSlot: ${duty.slot}`;
+                    } else if (type === 'Attester') {
+                        title = '📝 Attestation Duty';
+                        body = `In ${minutesUntil} minute${minutesUntil === 1 ? '' : 's'}\n\nValidator: ${validatorLabel}\nSlot: ${duty.slot}`;
+                    } else if (type === 'Sync Committee') {
+                        title = '🔐💎 SYNC COMMITTEE 💎🔐';
+                        body = `Validator: ${validatorLabel}\n${duty.period === 'current' ? 'Currently active' : 'Starting soon'}\n~27 hours of enhanced rewards`;
+                    } else if (type === 'Next Sync Committee') {
+                        title = '🔮💎 NEXT SYNC COMMITTEE 💎🔮';
+                        body = `Starting in ${minutesUntil} minute${minutesUntil === 1 ? '' : 's'}\n\nValidator: ${validatorLabel}\n~27 hours of enhanced rewards ahead!`;
+                    } else {
+                        title = `${type} Duty`;
+                        body = `In ${minutesUntil} minute${minutesUntil === 1 ? '' : 's'}\n\nValidator: ${validatorLabel}\nSlot: ${duty.slot}`;
                     }
                     
-                    const response = await fetch(`${this.serverUrl}/api/notify`, {
-                        method: 'POST',
-                        headers: { 'Content-Type': 'application/json' },
-                        body: JSON.stringify({
-                            type,
-                            validator: validator, // Send the raw index, not the label
-                            validatorDisplay, // Send the formatted display
-                            duty: {
-                                slot: duty.slot,
-                                timeUntil: this.formatTimeUntil(timeUntil)
-                            },
-                            urgency
-                        })
-                    });
+                    // Show desktop notification
+                    if ('Notification' in window && Notification.permission === 'granted') {
+                        try {
+                            const iconUrl = window.location.origin + '/favicon.ico';
+                            
+                            const notification = new Notification(title, {
+                                body: body,
+                                icon: iconUrl,
+                                badge: iconUrl,
+                                tag: dutyKey,
+                                requireInteraction: document.getElementById('desktopPersistent')?.checked !== false,
+                                vibrate: [200, 100, 200],
+                                silent: false,
+                                renotify: true
+                            });
+                            
+                            notification.onclick = () => {
+                                window.focus();
+                                notification.close();
+                                if (validator) {
+                                    window.open(`https://beaconcha.in/validator/${validator}`, '_blank');
+                                }
+                            };
+                            
+                            notification.onerror = (error) => {
+                                console.error('Notification error:', error);
+                            };
+                            
+                        } catch (notifError) {
+                            console.error('Failed to create notification:', notifError);
+                        }
+                        
+                        // Play sound if enabled
+                        if (document.getElementById('desktopSound')?.checked !== false) {
+                            try {
+                                const audioContext = new (window.AudioContext || window.webkitAudioContext)();
+                                const oscillator = audioContext.createOscillator();
+                                const gainNode = audioContext.createGain();
+                                
+                                oscillator.connect(gainNode);
+                                gainNode.connect(audioContext.destination);
+                                
+                                // Retro duty notification sound - different pitched square waves
+                                oscillator.type = 'square';
+                                const baseFreq = urgency === 'critical' ? 523.25 : urgency === 'urgent' ? 440 : 349.23; // C5, A4, F4
+                                oscillator.frequency.value = baseFreq;
+                                
+                                // Subtle volume with envelope
+                                gainNode.gain.setValueAtTime(0, audioContext.currentTime);
+                                gainNode.gain.linearRampToValueAtTime(0.03, audioContext.currentTime + 0.01);
+                                gainNode.gain.exponentialRampToValueAtTime(0.001, audioContext.currentTime + (urgency === 'critical' ? 0.25 : 0.15));
+                                
+                                oscillator.start();
+                                oscillator.stop(audioContext.currentTime + (urgency === 'critical' ? 0.25 : 0.15));
+                                
+                                console.log('Notification sound played');
+                            } catch (soundError) {
+                                console.error('Failed to play sound:', soundError);
+                            }
+                        }
+                    } else {
+                        console.log('Desktop notifications not available or not granted:', {
+                            hasNotification: 'Notification' in window,
+                            permission: Notification.permission
+                        });
+                    }
                     
-                    if (!response.ok) {
-                        console.error('Browser notification response not ok:', await response.text());
+                    // Also send push notification if available
+                    if (this.pushSubscription) {
+                        const response = await fetch(`${this.serverUrl}/api/notify`, {
+                            method: 'POST',
+                            headers: { 'Content-Type': 'application/json' },
+                            body: JSON.stringify({
+                                type,
+                                validator: validator,
+                                validatorDisplay,
+                                duty: {
+                                    slot: duty.slot,
+                                    timeUntil: this.formatTimeUntil(timeUntil)
+                                },
+                                urgency
+                            })
+                        });
+                        
+                        if (!response.ok) {
+                            console.error('Push notification response not ok:', await response.text());
+                        }
                     }
                 } catch (error) {
                     console.error('Browser notification error:', error);
@@ -1410,7 +1656,12 @@ class ValidatorDutiesTracker {
             // Since we now always store indices, all validators should be indices
             let indexDisplay = `<a href="https://beaconcha.in/validator/${validatorId}" target="_blank" class="validator-index-link" title="Click to view on Beaconcha.in">
                 <span class="validator-label-display">${displayLabel}</span>
-                <input type="text" class="validator-label-edit" style="display: none;" value="${displayLabel}" onblur="app.saveValidatorLabel('${validatorId}', this.value)" onkeypress="if(event.key==='Enter') this.blur()" onclick="event.stopPropagation();">
+                <input type="text" class="validator-label-edit" style="display: none;" value="${displayLabel}" 
+                    onblur="app.saveValidatorLabel('${validatorId}', this.value)" 
+                    onkeypress="if(event.key==='Enter') { event.preventDefault(); this.blur(); }" 
+                    onclick="event.stopPropagation(); event.preventDefault();" 
+                    onmousedown="event.stopPropagation();"
+                    onfocus="event.stopPropagation();">
             </a>`;
             let pubkeyPreview = `<span class="validator-pubkey-preview">Loading...</span>`;
             
@@ -1553,8 +1804,11 @@ class ValidatorDutiesTracker {
             if (labelDisplay && labelInput) {
                 labelDisplay.style.display = 'none';
                 labelInput.style.display = 'inline';
-                labelInput.focus();
-                labelInput.select();
+                // Small delay to ensure the input is visible before focusing
+                setTimeout(() => {
+                    labelInput.focus();
+                    labelInput.select();
+                }, 10);
             }
         }
     }
@@ -2386,6 +2640,10 @@ class ValidatorDutiesTracker {
         
         if (this.duties.sync.length === 0) {
             panel.innerHTML = `
+                <div class="panel-header">
+                    <h3>Current/Next Sync Committee member</h3>
+                    <p class="panel-subtitle">Sync Committee</p>
+                </div>
                 <div style="text-align: center; padding: 20px;">
                     <p style="color: var(--text-secondary); margin-bottom: 10px;">No sync committee duties found for your validators</p>
                     <p style="color: var(--text-secondary); font-size: 0.9rem;">Sync committees are selected every ~27 hours</p>
@@ -2395,7 +2653,7 @@ class ValidatorDutiesTracker {
         }
         
         const currentEpoch = Math.floor(this.getCurrentSlotSync() / 32);
-        const html = this.duties.sync.map(duty => {
+        const dutyHtml = this.duties.sync.map(duty => {
             let dutyInfo = '';
             let timeDisplay = '';
             
@@ -2421,16 +2679,24 @@ class ValidatorDutiesTracker {
                     <a href="https://beaconcha.in/validator/${duty.validator}" target="_blank" class="validator-tag" style="background-color: ${color}" title="View validator ${duty.validator}">${label}</a>
                     <div class="duty-content">
                         <div class="duty-header">
-                            <span class="duty-type">Sync Committee</span>
+                            <span class="duty-type">${dutyInfo}</span>
                             <span class="duty-time">${timeDisplay}</span>
                         </div>
                         <div class="duty-details">
-                            <div>${dutyInfo}</div>
+                            <div>Sync Committee</div>
                         </div>
                     </div>
                 </div>
             `;
         }).join('');
+        
+        const html = `
+            <div class="panel-header">
+                <h3>Current/Next Sync Committee member</h3>
+                <p class="panel-subtitle">Sync Committee</p>
+            </div>
+            ${dutyHtml}
+        `;
         
         panel.innerHTML = html;
     }
@@ -2465,11 +2731,12 @@ class ValidatorDutiesTracker {
         const timeElapsed = epochsElapsed * 32 * 12 * 1000; // epochs * slots * seconds * ms
         
         // Count tracked validators in sync committees
+        const validatorIds = this.validators.map(v => v.id || v);
         const trackedInCurrent = this.networkOverview.currentSyncCommittee.filter(v => 
-            this.validators.includes(v) || this.validators.includes(v.toString())
+            validatorIds.includes(v) || validatorIds.includes(v.toString())
         );
         const trackedInNext = this.networkOverview.nextSyncCommittee.filter(v => 
-            this.validators.includes(v) || this.validators.includes(v.toString())
+            validatorIds.includes(v) || validatorIds.includes(v.toString())
         );
         
         let html = `
@@ -2696,7 +2963,7 @@ class ValidatorDutiesTracker {
         `;
         
         validators.forEach(validatorIndex => {
-            const isTracked = this.validators.includes(validatorIndex.toString());
+            const isTracked = this.validators.some(v => (v.id || v) === validatorIndex.toString());
             const color = isTracked ? this.getValidatorColor(validatorIndex.toString()) : '#6b7280';
             
             html += `
@@ -2724,7 +2991,9 @@ class ValidatorDutiesTracker {
             notifyAttester: sessionStorage.getItem('notifyAttester') !== 'false',
             notifySync: sessionStorage.getItem('notifySync') !== 'false',
             notifyMissed: sessionStorage.getItem('notifyMissed') === 'true', // Default to false
-            notifyMinutes: sessionStorage.getItem('notifyMinutes') || '10'
+            notifyMinutes: sessionStorage.getItem('notifyMinutes') || '10',
+            desktopSound: sessionStorage.getItem('desktopSound') !== 'false',
+            desktopPersistent: sessionStorage.getItem('desktopPersistent') !== 'false'
         };
         
         // Apply settings to UI
@@ -2734,6 +3003,18 @@ class ValidatorDutiesTracker {
         document.getElementById('notifyMissed').checked = settings.notifyMissed;
         document.getElementById('notifyMinutes').value = settings.notifyMinutes;
         
+        // Apply desktop settings if elements exist
+        if (document.getElementById('desktopSound')) {
+            document.getElementById('desktopSound').checked = settings.desktopSound;
+            document.getElementById('desktopPersistent').checked = settings.desktopPersistent;
+        }
+        
+        // Check if browser notifications are enabled and show settings
+        if (sessionStorage.getItem('browserNotifications') === 'true') {
+            const testBtn = document.getElementById('testBrowserNotification');
+            if (testBtn) testBtn.style.display = 'inline-block';
+        }
+        
         // Save settings on change
         ['notifyProposer', 'notifyAttester', 'notifySync'].forEach(id => {
             document.getElementById(id).addEventListener('change', (e) => {
@@ -2742,12 +3023,48 @@ class ValidatorDutiesTracker {
             });
         });
         
+        // Save desktop settings on change
+        ['desktopSound', 'desktopPersistent'].forEach(id => {
+            if (document.getElementById(id)) {
+                document.getElementById(id).addEventListener('change', (e) => {
+                    sessionStorage.setItem(id, e.target.checked);
+                });
+            }
+        });
+        
         // Don't add event listener for disabled notifyMissed checkbox
         
         document.getElementById('notifyMinutes').addEventListener('change', (e) => {
             sessionStorage.setItem('notifyMinutes', e.target.value);
             this.sendNotificationSettingsUpdate();
         });
+        
+        // Also add event listeners for Telegram settings
+        ['notifyProposerTelegram', 'notifyAttesterTelegram', 'notifySyncTelegram'].forEach(id => {
+            const elem = document.getElementById(id);
+            if (elem) {
+                elem.addEventListener('change', (e) => {
+                    const baseId = id.replace('Telegram', '');
+                    sessionStorage.setItem(baseId, e.target.checked);
+                    this.sendNotificationSettingsUpdate();
+                });
+                // Sync initial state with regular settings
+                const baseId = id.replace('Telegram', '');
+                elem.checked = sessionStorage.getItem(baseId) !== 'false';
+            }
+        });
+        
+        const telegramMinutesElem = document.getElementById('notifyMinutesTelegram');
+        if (telegramMinutesElem) {
+            telegramMinutesElem.addEventListener('change', (e) => {
+                sessionStorage.setItem('notifyMinutes', e.target.value);
+                // Sync both dropdowns
+                document.getElementById('notifyMinutes').value = e.target.value;
+                this.sendNotificationSettingsUpdate();
+            });
+            // Sync initial value
+            telegramMinutesElem.value = settings.notifyMinutes;
+        }
     }
 
     cacheDuties() {
@@ -3187,6 +3504,24 @@ class ValidatorDutiesTracker {
         }
     }
 
+    initializeDarkMode() {
+        // Load saved theme preference or default to light
+        const savedTheme = sessionStorage.getItem('darkMode') || 'light';
+        document.documentElement.setAttribute('data-theme', savedTheme);
+        
+        // Update toggle button icons
+        const sunIcon = document.querySelector('#darkModeToggle .sun-icon');
+        const moonIcon = document.querySelector('#darkModeToggle .moon-icon');
+        
+        if (savedTheme === 'dark') {
+            sunIcon.classList.add('hidden');
+            moonIcon.classList.remove('hidden');
+        } else {
+            sunIcon.classList.remove('hidden');
+            moonIcon.classList.add('hidden');
+        }
+    }
+
     toggleDashboardMode() {
         this.isDashboardMode = !this.isDashboardMode;
         sessionStorage.setItem('dashboardMode', this.isDashboardMode.toString());
@@ -3245,6 +3580,27 @@ class ValidatorDutiesTracker {
         
         // Switch to normal mode
         this.switchToNormal();
+    }
+
+    toggleDarkMode() {
+        const isDark = document.documentElement.getAttribute('data-theme') === 'dark';
+        const newTheme = isDark ? 'light' : 'dark';
+        
+        // Update theme
+        document.documentElement.setAttribute('data-theme', newTheme);
+        sessionStorage.setItem('darkMode', newTheme);
+        
+        // Update toggle button icons
+        const sunIcon = document.querySelector('#darkModeToggle .sun-icon');
+        const moonIcon = document.querySelector('#darkModeToggle .moon-icon');
+        
+        if (newTheme === 'dark') {
+            sunIcon.classList.add('hidden');
+            moonIcon.classList.remove('hidden');
+        } else {
+            sunIcon.classList.remove('hidden');
+            moonIcon.classList.add('hidden');
+        }
     }
 
     startDashboardUpdates() {
