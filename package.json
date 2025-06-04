@@ -1,6 +1,6 @@
 {
   "name": "eth-duties-tracker",
-  "version": "1.2.5",
+  "version": "1.2.7",
   "description": "Ethereum Validator Duties Tracker with notifications",
   "main": "server.js",
   "scripts": {

@@ -7,12 +7,12 @@ class ValidatorDutiesTracker {
         ];
         
         // Load beacon URL from storage or select a random public node on first load
-        this.beaconUrl = localStorage.getItem('beaconUrl');
+        this.beaconUrl = sessionStorage.getItem('beaconUrl');
         if (!this.beaconUrl) {
             // First load - select a random public node
             const randomIndex = Math.floor(Math.random() * this.publicBeaconUrls.length);
             this.beaconUrl = this.publicBeaconUrls[randomIndex].url;
-            localStorage.setItem('beaconUrl', this.beaconUrl);
+            sessionStorage.setItem('beaconUrl', this.beaconUrl);
         }
         
         this.serverUrl = window.APP_CONFIG?.serverUrl || 'http://localhost:3000';
@@ -84,11 +84,10 @@ class ValidatorDutiesTracker {
         
         document.getElementById('fetchDutiesBtn').addEventListener('click', () => this.fetchAllDuties());
         document.getElementById('clearCacheBtn').addEventListener('click', () => this.clearCache());
-        document.getElementById('clearAllDataBtn').addEventListener('click', () => this.clearAllData());
         document.getElementById('fetchNetworkBtn').addEventListener('click', () => this.fetchNetworkOverviewOnly());
         
         // Load and set auto-refresh setting
-        const autoRefreshEnabled = localStorage.getItem('autoRefresh') === 'true';
+        const autoRefreshEnabled = sessionStorage.getItem('autoRefresh') === 'true';
         const autoRefreshCheckbox = document.getElementById('autoRefresh');
         autoRefreshCheckbox.checked = autoRefreshEnabled;
         
@@ -97,7 +96,7 @@ class ValidatorDutiesTracker {
         }
         
         autoRefreshCheckbox.addEventListener('change', (e) => {
-            localStorage.setItem('autoRefresh', e.target.checked);
+            sessionStorage.setItem('autoRefresh', e.target.checked);
             if (e.target.checked) {
                 this.startAutoRefresh();
             } else {
@@ -128,7 +127,7 @@ class ValidatorDutiesTracker {
             if (e.target.value) {
                 this.beaconUrl = e.target.value;
                 beaconUrlInput.value = this.beaconUrl;
-                localStorage.setItem('beaconUrl', this.beaconUrl);
+                sessionStorage.setItem('beaconUrl', this.beaconUrl);
                 
                 // Track analytics event
                 if (typeof Analytics !== 'undefined') {
@@ -141,7 +140,7 @@ class ValidatorDutiesTracker {
         
         beaconUrlInput.addEventListener('change', (e) => {
             this.beaconUrl = e.target.value;
-            localStorage.setItem('beaconUrl', this.beaconUrl);
+            sessionStorage.setItem('beaconUrl', this.beaconUrl);
             
             // Update dropdown if it matches a public beacon
             const matchingBeacon = this.publicBeaconUrls.find(b => b.url === this.beaconUrl);
@@ -196,14 +195,14 @@ class ValidatorDutiesTracker {
         this.vapidPublicKey = publicKey;
         
         // Load saved Telegram chat ID
-        const savedChatId = localStorage.getItem('telegramChatId');
-        const telegramEnabled = localStorage.getItem('telegramEnabled') === 'true';
+        const savedChatId = sessionStorage.getItem('telegramChatId');
+        const telegramEnabled = sessionStorage.getItem('telegramEnabled') === 'true';
         
         if (savedChatId) {
             document.getElementById('telegramChatId').value = savedChatId;
             
             if (telegramEnabled) {
-                this.showNotificationStatus('telegram', 'Telegram notifications active', true);
+                this.showNotificationStatus('telegram', 'Telegram notifications active from previous session', true);
                 document.getElementById('enableTelegramNotifications').style.display = 'none';
                 document.getElementById('updateTelegramSubscription').style.display = 'inline-block';
             }
@@ -262,7 +261,7 @@ class ValidatorDutiesTracker {
             }
             
             this.showNotificationStatus('browser', 'Desktop notifications enabled', true);
-            localStorage.setItem('browserNotifications', 'true');
+            sessionStorage.setItem('browserNotifications', 'true');
             
             // Track analytics event
             if (typeof Analytics !== 'undefined') {
@@ -371,8 +370,8 @@ class ValidatorDutiesTracker {
                 throw new Error('Failed to subscribe to Telegram notifications');
             }
             
-            localStorage.setItem('telegramChatId', chatId);
-            localStorage.setItem('telegramEnabled', 'true');
+            sessionStorage.setItem('telegramChatId', chatId);
+            sessionStorage.setItem('telegramEnabled', 'true');
             
             const validatorList = this.validators.map(v => this.getValidatorLabel(v)).join(', ');
             this.showNotificationStatus('telegram', `Telegram notifications enabled for: ${validatorList}`, true);
@@ -431,8 +430,8 @@ class ValidatorDutiesTracker {
     
     async updateTelegramSubscriptionSilent(newValidator = null) {
         // Only update if Telegram is enabled
-        const telegramEnabled = localStorage.getItem('telegramEnabled') === 'true';
-        const telegramChatId = localStorage.getItem('telegramChatId');
+        const telegramEnabled = sessionStorage.getItem('telegramEnabled') === 'true';
+        const telegramChatId = sessionStorage.getItem('telegramChatId');
         
         if (!telegramEnabled || !telegramChatId) {
             return;
@@ -441,8 +440,8 @@ class ValidatorDutiesTracker {
         try {
             // If we have a specific new validator, send it separately to avoid showing all validators
             if (newValidator) {
-                // Get previous validators from local storage
-                const previousValidators = JSON.parse(localStorage.getItem('telegramValidators') || '[]');
+                // Get previous validators from session storage
+                const previousValidators = JSON.parse(sessionStorage.getItem('telegramValidators') || '[]');
                 
                 // Only send update if this is actually a new validator
                 if (!previousValidators.includes(newValidator)) {
@@ -460,7 +459,7 @@ class ValidatorDutiesTracker {
                 }
                 
                 // Update stored validators
-                localStorage.setItem('telegramValidators', JSON.stringify(this.validators.map(v => v.id || v)));
+                sessionStorage.setItem('telegramValidators', JSON.stringify(this.validators.map(v => v.id || v)));
             } else {
                 // Full update
                 await fetch(`${this.serverUrl}/api/telegram/update`, {
@@ -472,7 +471,7 @@ class ValidatorDutiesTracker {
                         beaconUrl: this.beaconUrl
                     })
                 });
-                localStorage.setItem('telegramValidators', JSON.stringify(this.validators.map(v => v.id || v)));
+                sessionStorage.setItem('telegramValidators', JSON.stringify(this.validators.map(v => v.id || v)));
             }
         } catch (error) {
             console.error('Silent Telegram update error:', error);
@@ -492,8 +491,8 @@ class ValidatorDutiesTracker {
     
     async sendNotificationSettingsUpdate() {
         // Only send if Telegram is enabled
-        const telegramEnabled = localStorage.getItem('telegramEnabled') === 'true';
-        const telegramChatId = localStorage.getItem('telegramChatId');
+        const telegramEnabled = sessionStorage.getItem('telegramEnabled') === 'true';
+        const telegramChatId = sessionStorage.getItem('telegramChatId');
         
         if (!telegramEnabled || !telegramChatId) {
             return;
@@ -801,8 +800,8 @@ class ValidatorDutiesTracker {
                 timestamp: new Date().toISOString()
             };
             
-            // Save to local storage for persistence
-            localStorage.setItem('blockDetails', JSON.stringify(this.blockDetails));
+            // Save to session storage for persistence
+            sessionStorage.setItem('blockDetails', JSON.stringify(this.blockDetails));
             
             // Update the proposer duties display
             this.displayProposerDuties();
@@ -824,9 +823,9 @@ class ValidatorDutiesTracker {
     }
     
     async sendBlockDetailsNotification(slot, validator, details) {
-        const telegramEnabled = localStorage.getItem('telegramEnabled') === 'true';
-        const telegramChatId = localStorage.getItem('telegramChatId');
-        const browserEnabled = localStorage.getItem('browserNotifications') === 'true';
+        const telegramEnabled = sessionStorage.getItem('telegramEnabled') === 'true';
+        const telegramChatId = sessionStorage.getItem('telegramChatId');
+        const browserEnabled = sessionStorage.getItem('browserNotifications') === 'true';
         
         // Get validator display
         let validatorDisplay = validator;
@@ -1047,8 +1046,8 @@ class ValidatorDutiesTracker {
             console.log(`Sending notification for ${type} duty: validator ${validator}, slot ${duty.slot}, minutes until: ${minutesUntil}`);
             
             // Send Telegram notification if enabled
-            const telegramEnabled = localStorage.getItem('telegramEnabled') === 'true';
-            const telegramChatId = localStorage.getItem('telegramChatId');
+            const telegramEnabled = sessionStorage.getItem('telegramEnabled') === 'true';
+            const telegramChatId = sessionStorage.getItem('telegramChatId');
             
             if (telegramEnabled && telegramChatId) {
                 try {
@@ -1096,7 +1095,7 @@ class ValidatorDutiesTracker {
             }
             
             // Send browser notification if enabled
-            const browserEnabled = localStorage.getItem('browserNotifications') === 'true';
+            const browserEnabled = sessionStorage.getItem('browserNotifications') === 'true';
             if (browserEnabled) {
                 try {
                     console.log('Sending browser notification for validator:', validator);
@@ -1219,7 +1218,7 @@ class ValidatorDutiesTracker {
     }
 
     loadValidators() {
-        const stored = localStorage.getItem('validators');
+        const stored = sessionStorage.getItem('validators');
         let validators = stored ? JSON.parse(stored) : [];
         
         // Migrate old format (array of IDs) to new format (array of objects)
@@ -1241,11 +1240,11 @@ class ValidatorDutiesTracker {
     }
 
     saveValidators() {
-        localStorage.setItem('validators', JSON.stringify(this.validators));
+        sessionStorage.setItem('validators', JSON.stringify(this.validators));
     }
     
     loadBlockDetails() {
-        const stored = localStorage.getItem('blockDetails');
+        const stored = sessionStorage.getItem('blockDetails');
         if (stored) {
             try {
                 this.blockDetails = JSON.parse(stored);
@@ -1259,7 +1258,7 @@ class ValidatorDutiesTracker {
     }
     
     loadMissedAttestations() {
-        const stored = localStorage.getItem('missedAttestations');
+        const stored = sessionStorage.getItem('missedAttestations');
         if (stored) {
             try {
                 return JSON.parse(stored);
@@ -1272,25 +1271,25 @@ class ValidatorDutiesTracker {
     }
     
     saveMissedAttestations() {
-        localStorage.setItem('missedAttestations', JSON.stringify(this.missedAttestations));
+        sessionStorage.setItem('missedAttestations', JSON.stringify(this.missedAttestations));
     }
     
     clearBlockDetails() {
         this.blockDetails = {};
-        localStorage.removeItem('blockDetails');
+        sessionStorage.removeItem('blockDetails');
         this.displayProposerDuties();
     }
     
     clearSingleBlock(slot) {
         if (this.blockDetails && this.blockDetails[slot]) {
             delete this.blockDetails[slot];
-            localStorage.setItem('blockDetails', JSON.stringify(this.blockDetails));
+            sessionStorage.setItem('blockDetails', JSON.stringify(this.blockDetails));
             this.displayProposerDuties();
         }
     }
     
     loadNotifiedDuties() {
-        const stored = localStorage.getItem('notifiedDuties');
+        const stored = sessionStorage.getItem('notifiedDuties');
         if (stored) {
             try {
                 const duties = JSON.parse(stored);
@@ -1302,7 +1301,7 @@ class ValidatorDutiesTracker {
     }
     
     saveNotifiedDuties() {
-        localStorage.setItem('notifiedDuties', JSON.stringify([...this.notifiedDuties]));
+        sessionStorage.setItem('notifiedDuties', JSON.stringify([...this.notifiedDuties]));
     }
     
     // Validate validator index (positive integer)
@@ -1794,18 +1793,18 @@ class ValidatorDutiesTracker {
     }
     
     getValidatorCustomLabel(validator) {
-        const labels = JSON.parse(localStorage.getItem('validatorLabels') || '{}');
+        const labels = JSON.parse(sessionStorage.getItem('validatorLabels') || '{}');
         return labels[validator] || null;
     }
     
     setValidatorCustomLabel(validator, label) {
-        const labels = JSON.parse(localStorage.getItem('validatorLabels') || '{}');
+        const labels = JSON.parse(sessionStorage.getItem('validatorLabels') || '{}');
         if (label && label.trim()) {
             labels[validator] = label.trim();
         } else {
             delete labels[validator];
         }
-        localStorage.setItem('validatorLabels', JSON.stringify(labels));
+        sessionStorage.setItem('validatorLabels', JSON.stringify(labels));
     }
     
     editValidatorLabel(validator, event) {
@@ -2238,8 +2237,8 @@ class ValidatorDutiesTracker {
         const validatorDisplay = customLabel || validatorId;
         
         // Send Telegram notification if enabled
-        const telegramEnabled = localStorage.getItem('telegramEnabled') === 'true';
-        const telegramChatId = localStorage.getItem('telegramChatId');
+        const telegramEnabled = sessionStorage.getItem('telegramEnabled') === 'true';
+        const telegramChatId = sessionStorage.getItem('telegramChatId');
         
         if (telegramEnabled && telegramChatId) {
             try {
@@ -2259,7 +2258,7 @@ class ValidatorDutiesTracker {
         }
         
         // Send browser notification if enabled
-        const browserEnabled = localStorage.getItem('browserNotifications') === 'true';
+        const browserEnabled = sessionStorage.getItem('browserNotifications') === 'true';
         if (browserEnabled && this.pushSubscription) {
             try {
                 await fetch(`${this.serverUrl}/api/notify`, {
@@ -3019,13 +3018,13 @@ class ValidatorDutiesTracker {
     loadNotificationSettings() {
         // Load saved settings
         const settings = {
-            notifyProposer: localStorage.getItem('notifyProposer') !== 'false',
-            notifyAttester: localStorage.getItem('notifyAttester') !== 'false',
-            notifySync: localStorage.getItem('notifySync') !== 'false',
-            notifyMissed: localStorage.getItem('notifyMissed') === 'true', // Default to false
-            notifyMinutes: localStorage.getItem('notifyMinutes') || '10',
-            desktopSound: localStorage.getItem('desktopSound') !== 'false',
-            desktopPersistent: localStorage.getItem('desktopPersistent') !== 'false'
+            notifyProposer: sessionStorage.getItem('notifyProposer') !== 'false',
+            notifyAttester: sessionStorage.getItem('notifyAttester') !== 'false',
+            notifySync: sessionStorage.getItem('notifySync') !== 'false',
+            notifyMissed: sessionStorage.getItem('notifyMissed') === 'true', // Default to false
+            notifyMinutes: sessionStorage.getItem('notifyMinutes') || '10',
+            desktopSound: sessionStorage.getItem('desktopSound') !== 'false',
+            desktopPersistent: sessionStorage.getItem('desktopPersistent') !== 'false'
         };
         
         // Apply settings to UI
@@ -3042,7 +3041,7 @@ class ValidatorDutiesTracker {
         }
         
         // Check if browser notifications are enabled and show settings
-        if (localStorage.getItem('browserNotifications') === 'true') {
+        if (sessionStorage.getItem('browserNotifications') === 'true') {
             const testBtn = document.getElementById('testBrowserNotification');
             if (testBtn) testBtn.style.display = 'inline-block';
         }
@@ -3050,7 +3049,7 @@ class ValidatorDutiesTracker {
         // Save settings on change
         ['notifyProposer', 'notifyAttester', 'notifySync'].forEach(id => {
             document.getElementById(id).addEventListener('change', (e) => {
-                localStorage.setItem(id, e.target.checked);
+                sessionStorage.setItem(id, e.target.checked);
                 this.sendNotificationSettingsUpdate();
             });
         });
@@ -3059,7 +3058,7 @@ class ValidatorDutiesTracker {
         ['desktopSound', 'desktopPersistent'].forEach(id => {
             if (document.getElementById(id)) {
                 document.getElementById(id).addEventListener('change', (e) => {
-                    localStorage.setItem(id, e.target.checked);
+                    sessionStorage.setItem(id, e.target.checked);
                 });
             }
         });
@@ -3067,7 +3066,7 @@ class ValidatorDutiesTracker {
         // Don't add event listener for disabled notifyMissed checkbox
         
         document.getElementById('notifyMinutes').addEventListener('change', (e) => {
-            localStorage.setItem('notifyMinutes', e.target.value);
+            sessionStorage.setItem('notifyMinutes', e.target.value);
             this.sendNotificationSettingsUpdate();
         });
         
@@ -3077,19 +3076,19 @@ class ValidatorDutiesTracker {
             if (elem) {
                 elem.addEventListener('change', (e) => {
                     const baseId = id.replace('Telegram', '');
-                    localStorage.setItem(baseId, e.target.checked);
+                    sessionStorage.setItem(baseId, e.target.checked);
                     this.sendNotificationSettingsUpdate();
                 });
                 // Sync initial state with regular settings
                 const baseId = id.replace('Telegram', '');
-                elem.checked = localStorage.getItem(baseId) !== 'false';
+                elem.checked = sessionStorage.getItem(baseId) !== 'false';
             }
         });
         
         const telegramMinutesElem = document.getElementById('notifyMinutesTelegram');
         if (telegramMinutesElem) {
             telegramMinutesElem.addEventListener('change', (e) => {
-                localStorage.setItem('notifyMinutes', e.target.value);
+                sessionStorage.setItem('notifyMinutes', e.target.value);
                 // Sync both dropdowns
                 document.getElementById('notifyMinutes').value = e.target.value;
                 this.sendNotificationSettingsUpdate();
@@ -3104,11 +3103,11 @@ class ValidatorDutiesTracker {
             duties: this.duties,
             timestamp: Date.now()
         };
-        localStorage.setItem('dutiesCache', JSON.stringify(cache));
+        sessionStorage.setItem('dutiesCache', JSON.stringify(cache));
     }
 
     loadCachedDuties() {
-        const cached = localStorage.getItem('dutiesCache');
+        const cached = sessionStorage.getItem('dutiesCache');
         if (!cached) return;
         
         const { duties, timestamp } = JSON.parse(cached);
@@ -3121,7 +3120,7 @@ class ValidatorDutiesTracker {
     }
 
     clearCache() {
-        localStorage.removeItem('dutiesCache');
+        sessionStorage.removeItem('dutiesCache');
         this.duties = {
             proposer: [],
             attester: [],
@@ -3130,69 +3129,11 @@ class ValidatorDutiesTracker {
         
         // Clear missed attestations
         this.missedAttestations = {};
-        localStorage.removeItem('missedAttestations');
+        sessionStorage.removeItem('missedAttestations');
         
         this.displayDuties();
         this.renderValidators(); // Re-render to remove missed attestation indicators
         this.showSuccess('Cache and missed attestations cleared');
-    }
-    
-    clearAllData() {
-        if (!confirm('Are you sure you want to clear all data? This will remove all validators, settings, and preferences.')) {
-            return;
-        }
-        
-        // Clear all localStorage items
-        localStorage.clear();
-        
-        // Reset app state
-        this.validators = [];
-        this.duties = {
-            proposer: [],
-            attester: [],
-            sync: []
-        };
-        this.missedAttestations = {};
-        this.notifiedDuties = new Set();
-        this.validatorColors = {};
-        
-        // Reset UI elements
-        this.renderValidators();
-        this.displayDuties();
-        
-        // Reset form fields
-        document.getElementById('beaconUrl').value = '';
-        document.getElementById('publicBeaconSelect').value = '';
-        document.getElementById('telegramChatId').value = '';
-        document.getElementById('autoRefresh').checked = false;
-        
-        // Reset notification checkboxes to defaults
-        document.getElementById('notifyProposer').checked = true;
-        document.getElementById('notifyAttester').checked = true;
-        document.getElementById('notifySync').checked = true;
-        document.getElementById('notifyMinutes').value = '10';
-        document.getElementById('notifyProposerTelegram').checked = true;
-        document.getElementById('notifyAttesterTelegram').checked = true;
-        document.getElementById('notifySyncTelegram').checked = true;
-        document.getElementById('notifyMinutesTelegram').value = '10';
-        
-        // Hide notification status messages
-        document.getElementById('telegramNotificationStatus').textContent = '';
-        document.getElementById('browserNotificationStatus').textContent = '';
-        
-        // Reset button visibility
-        document.getElementById('enableTelegramNotifications').style.display = 'inline-block';
-        document.getElementById('updateTelegramSubscription').style.display = 'none';
-        document.getElementById('testBrowserNotification').style.display = 'none';
-        
-        // Set a default beacon URL
-        const randomIndex = Math.floor(Math.random() * this.publicBeaconUrls.length);
-        this.beaconUrl = this.publicBeaconUrls[randomIndex].url;
-        localStorage.setItem('beaconUrl', this.beaconUrl);
-        document.getElementById('beaconUrl').value = this.beaconUrl;
-        document.getElementById('publicBeaconSelect').value = this.beaconUrl;
-        
-        this.showSuccess('All data has been cleared');
     }
 
     startAutoRefresh() {
@@ -3410,7 +3351,7 @@ class ValidatorDutiesTracker {
                         if (data.settings.beaconUrl) {
                             this.beaconUrl = data.settings.beaconUrl;
                             document.getElementById('beaconUrl').value = data.settings.beaconUrl;
-                            localStorage.setItem('beaconUrl', data.settings.beaconUrl);
+                            sessionStorage.setItem('beaconUrl', data.settings.beaconUrl);
                         }
                         
                         // Restore notification settings
@@ -3424,15 +3365,15 @@ class ValidatorDutiesTracker {
                         // Restore Telegram settings
                         if (data.settings.telegram) {
                             if (data.settings.telegram.chatId) {
-                                localStorage.setItem('telegramChatId', data.settings.telegram.chatId);
+                                sessionStorage.setItem('telegramChatId', data.settings.telegram.chatId);
                                 document.getElementById('telegramChatId').value = data.settings.telegram.chatId;
                             }
-                            localStorage.setItem('telegramEnabled', data.settings.telegram.enabled ? 'true' : 'false');
+                            sessionStorage.setItem('telegramEnabled', data.settings.telegram.enabled ? 'true' : 'false');
                         }
                         
                         // Restore browser notification setting
                         if (data.settings.browser) {
-                            localStorage.setItem('browserNotifications', data.settings.browser.enabled ? 'true' : 'false');
+                            sessionStorage.setItem('browserNotifications', data.settings.browser.enabled ? 'true' : 'false');
                         }
                         
                         // Re-initialize notifications to update UI
@@ -3440,7 +3381,7 @@ class ValidatorDutiesTracker {
                         
                         // Restore auto-refresh
                         if (data.settings.autoRefresh !== undefined) {
-                            localStorage.setItem('autoRefresh', data.settings.autoRefresh ? 'true' : 'false');
+                            sessionStorage.setItem('autoRefresh', data.settings.autoRefresh ? 'true' : 'false');
                             document.getElementById('autoRefresh').checked = data.settings.autoRefresh;
                             if (data.settings.autoRefresh) {
                                 this.startAutoRefresh();
@@ -3533,13 +3474,13 @@ class ValidatorDutiesTracker {
                     minutesBefore: parseInt(document.getElementById('notifyMinutes').value)
                 },
                 telegram: {
-                    enabled: localStorage.getItem('telegramEnabled') === 'true',
-                    chatId: localStorage.getItem('telegramChatId') || ''
+                    enabled: sessionStorage.getItem('telegramEnabled') === 'true',
+                    chatId: sessionStorage.getItem('telegramChatId') || ''
                 },
                 browser: {
-                    enabled: localStorage.getItem('browserNotifications') === 'true'
+                    enabled: sessionStorage.getItem('browserNotifications') === 'true'
                 },
-                autoRefresh: localStorage.getItem('autoRefresh') === 'true'
+                autoRefresh: sessionStorage.getItem('autoRefresh') === 'true'
             },
             validators: []
         };
@@ -3586,7 +3527,7 @@ class ValidatorDutiesTracker {
 
     // Dashboard Mode Functionality
     initializeDashboard() {
-        this.isDashboardMode = localStorage.getItem('dashboardMode') === 'true';
+        this.isDashboardMode = sessionStorage.getItem('dashboardMode') === 'true';
         this.dashboardUpdateInterval = null;
         this.blockStreamData = [];
         
@@ -3597,7 +3538,7 @@ class ValidatorDutiesTracker {
 
     initializeDarkMode() {
         // Load saved theme preference or default to light
-        const savedTheme = localStorage.getItem('darkMode') || 'light';
+        const savedTheme = sessionStorage.getItem('darkMode') || 'light';
         document.documentElement.setAttribute('data-theme', savedTheme);
         
         // Update toggle button icons
@@ -3615,7 +3556,7 @@ class ValidatorDutiesTracker {
 
     toggleDashboardMode() {
         this.isDashboardMode = !this.isDashboardMode;
-        localStorage.setItem('dashboardMode', this.isDashboardMode.toString());
+        sessionStorage.setItem('dashboardMode', this.isDashboardMode.toString());
         
         // Track analytics event
         if (typeof Analytics !== 'undefined') {
@@ -3648,7 +3589,7 @@ class ValidatorDutiesTracker {
         // Force enable auto-refresh in dashboard mode
         this.startAutoRefresh();
         document.getElementById('autoRefresh').checked = true;
-        localStorage.setItem('autoRefresh', 'true');
+        sessionStorage.setItem('autoRefresh', 'true');
         
         // Start dashboard updates
         this.updateDashboard();
@@ -3672,7 +3613,7 @@ class ValidatorDutiesTracker {
     exitDashboardMode() {
         // Set dashboard mode to false
         this.isDashboardMode = false;
-        localStorage.setItem('dashboardMode', 'false');
+        sessionStorage.setItem('dashboardMode', 'false');
         
         // Switch to normal mode
         this.switchToNormal();
@@ -3684,7 +3625,7 @@ class ValidatorDutiesTracker {
         
         // Update theme
         document.documentElement.setAttribute('data-theme', newTheme);
-        localStorage.setItem('darkMode', newTheme);
+        sessionStorage.setItem('darkMode', newTheme);
         
         // Update toggle button icons
         const sunIcon = document.querySelector('#darkModeToggle .sun-icon');

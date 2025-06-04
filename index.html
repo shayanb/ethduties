@@ -303,6 +303,14 @@
                 </div>
             </div>
         </section>
+        
+        <section class="data-management-section">
+            <h2>Data Management</h2>
+            <div class="data-controls">
+                <p>All your data is stored locally in your browser. You can clear all stored data including validators, settings, and preferences.</p>
+                <button id="clearAllDataBtn" class="btn-danger">Clear All Data</button>
+            </div>
+        </section>
         </div>
         
         <!-- FAQ Page -->
@@ -365,7 +373,7 @@
                 
                 <div class="faq-item">
                     <h3>Is my data stored securely?</h3>
-                    <p>All data is stored locally in your browser's session storage. No validator information is sent to external servers except for the beacon node queries and optional notification services. The data is cleared when you close your browser session.</p>
+                    <p>All data is stored locally in your browser's local storage. No validator information is sent to external servers except for the beacon node queries and optional notification services. Your data persists between browser sessions until you manually clear it.</p>
                 </div>
                 
                 <div class="faq-item">
@@ -471,7 +479,7 @@
                 <div class="footer-info">
                     <div class="footer-row">
                         <p>
-                            Data is stored in your browser session
+                            Data is stored locally in your browser
                         </p>
                     </div>
                     <div class="footer-row footer-social">
@@ -496,7 +504,7 @@
                         <span style="font-size: 0.8rem; color: var(--text-secondary);">
                             Inspired by <a href="https://github.com/TobiWo/eth-duties" target="_blank">eth-duties</a> | 
                         </span>
-                        <a href="https://github.com/shayanb/ethduties" target="_blank" class="footer-version">v1.2.5</a>
+                        <a href="https://github.com/shayanb/ethduties" target="_blank" class="footer-version">v1.2.7</a>
                     </div>
                 </div>
             </div>

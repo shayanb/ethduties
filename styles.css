@@ -214,6 +214,24 @@ input[type="checkbox"] {
     background-color: #cbd5e1;
 }
 
+.btn-danger {
+    padding: 12px 24px;
+    border: none;
+    border-radius: 8px;
+    font-size: 1rem;
+    font-weight: 500;
+    cursor: pointer;
+    transition: all 0.3s ease;
+    background-color: #ef4444;
+    color: white;
+}
+
+.btn-danger:hover {
+    background-color: #dc2626;
+    transform: translateY(-1px);
+    box-shadow: 0 4px 12px rgba(239, 68, 68, 0.3);
+}
+
 .add-validator-form {
     margin-bottom: 30px;
     padding: 20px;
@@ -865,6 +883,27 @@ footer a:hover {
     font-size: 0.9rem;
     color: var(--text-secondary);
     margin: 0;
+}
+
+/* Data Management Styles */
+.data-management-section {
+    margin-top: 30px;
+}
+
+.data-controls {
+    background: var(--input-bg);
+    padding: 20px;
+    border-radius: 8px;
+    border: 1px solid var(--border-color);
+}
+
+.data-controls p {
+    margin-bottom: 15px;
+    color: var(--text-secondary);
+}
+
+.data-controls .btn-danger {
+    margin-top: 10px;
 }
 
 /* FAQ Styles */
