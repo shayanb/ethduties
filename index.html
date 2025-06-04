@@ -3,7 +3,51 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>ETH Validator Duties Tracker</title>
+    <title>ETH Validator Duties Tracker - Monitor Ethereum Validator Duties</title>
+    
+    <!-- SEO Meta Tags -->
+    <meta name="description" content="ETH Duties Tracker helps Ethereum validators monitor upcoming duties including block proposals, attestations, and sync committee participation with real-time notifications.">
+    <meta name="keywords" content="ethereum validator duties, eth validator tracker, validator duty notifications, block proposal tracker, attestation monitoring, sync committee tracker, ethereum staking dashboard, validator monitoring tool, eth duties notifications, telegram validator alerts">
+    <meta name="author" content="Shayan Bagheri">
+    <link rel="canonical" href="https://ethduties.com">
+    
+    <!-- Open Graph / Facebook -->
+    <meta property="og:type" content="website">
+    <meta property="og:url" content="https://ethduties.com">
+    <meta property="og:title" content="ETH Validator Duties Tracker">
+    <meta property="og:description" content="Monitor your Ethereum validator duties with real-time notifications for block proposals, attestations, and sync committee participation.">
+    <meta property="og:image" content="https://ethduties.com/assets/ethduties-logo.png">
+    
+    <!-- Twitter Card -->
+    <meta name="twitter:card" content="summary_large_image">
+    <meta name="twitter:url" content="https://ethduties.com">
+    <meta name="twitter:title" content="ETH Validator Duties Tracker">
+    <meta name="twitter:description" content="Monitor your Ethereum validator duties with real-time notifications for block proposals, attestations, and sync committee participation.">
+    <meta name="twitter:image" content="https://ethduties.com/assets/ethduties-logo.png">
+    <meta name="twitter:creator" content="@sbetamc">
+    
+    <!-- Favicon -->
+    <link rel="icon" type="image/x-icon" href="/favicon.ico">
+    <link rel="apple-touch-icon" sizes="180x180" href="/assets/ethduties-logo.png">
+    
+    <!-- Google Analytics 4 -->
+    <script async src="https://www.googletagmanager.com/gtag/js?id=G-0HTVPPV4CD"></script>
+    <script>
+        // Check for Do Not Track preference
+        var dnt = navigator.doNotTrack || window.doNotTrack || navigator.msDoNotTrack;
+        var doNotTrack = dnt == "1" || dnt == "yes";
+        
+        if (!doNotTrack) {
+            window.dataLayer = window.dataLayer || [];
+            function gtag(){dataLayer.push(arguments);}
+            gtag('js', new Date());
+            gtag('config', 'G-0HTVPPV4CD', {
+                anonymize_ip: true,
+                cookie_flags: 'SameSite=None;Secure'
+            });
+        }
+    </script>
+    
     <link rel="stylesheet" href="styles.css">
     <script src="https://cdn.jsdelivr.net/npm/canvas-confetti@1.6.0/dist/confetti.browser.min.js"></script>
 </head>
@@ -478,6 +522,7 @@
     </div>
 
     <script src="config.js"></script>
+    <script src="analytics.js"></script>
     <script src="app.js"></script>
 </body>
 </html>

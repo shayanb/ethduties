@@ -128,6 +128,12 @@ class ValidatorDutiesTracker {
                 this.beaconUrl = e.target.value;
                 beaconUrlInput.value = this.beaconUrl;
                 sessionStorage.setItem('beaconUrl', this.beaconUrl);
+                
+                // Track analytics event
+                if (typeof Analytics !== 'undefined') {
+                    Analytics.trackBeaconNodeChange(true);
+                }
+                
                 this.showSuccess('Beacon node URL updated');
             }
         });
@@ -139,6 +145,11 @@ class ValidatorDutiesTracker {
             // Update dropdown if it matches a public beacon
             const matchingBeacon = this.publicBeaconUrls.find(b => b.url === this.beaconUrl);
             publicSelect.value = matchingBeacon ? matchingBeacon.url : '';
+            
+            // Track analytics event
+            if (typeof Analytics !== 'undefined') {
+                Analytics.trackBeaconNodeChange(false);
+            }
             
             this.showSuccess('Beacon node URL updated');
         });
@@ -252,6 +263,11 @@ class ValidatorDutiesTracker {
             this.showNotificationStatus('browser', 'Desktop notifications enabled', true);
             sessionStorage.setItem('browserNotifications', 'true');
             
+            // Track analytics event
+            if (typeof Analytics !== 'undefined') {
+                Analytics.trackNotificationSetup('desktop', true);
+            }
+            
             // Show test button
             const testBtn = document.getElementById('testBrowserNotification');
             if (testBtn) testBtn.style.display = 'inline-block';
@@ -359,6 +375,11 @@ class ValidatorDutiesTracker {
             
             const validatorList = this.validators.map(v => this.getValidatorLabel(v)).join(', ');
             this.showNotificationStatus('telegram', `Telegram notifications enabled for: ${validatorList}`, true);
+            
+            // Track analytics event
+            if (typeof Analytics !== 'undefined') {
+                Analytics.trackNotificationSetup('telegram', true);
+            }
             
             // Update UI
             document.getElementById('enableTelegramNotifications').style.display = 'none';
@@ -1406,6 +1427,11 @@ class ValidatorDutiesTracker {
         // Show success message
         this.showSuccess(`Validator ${validator} added successfully`);
         
+        // Track analytics event
+        if (typeof Analytics !== 'undefined') {
+            Analytics.trackValidatorAction('add', this.validators.length);
+        }
+        
         // Update Telegram subscription if enabled
         this.updateTelegramSubscriptionSilent();
         
@@ -1853,6 +1879,11 @@ class ValidatorDutiesTracker {
             
             this.cacheDuties();
             this.displayDuties();
+            
+            // Track analytics event
+            if (typeof Analytics !== 'undefined') {
+                Analytics.trackDutyCheck('manual');
+            }
             
             // Fetch network overview in background
             this.fetchNetworkOverview(currentEpoch).catch(console.error);
@@ -3338,14 +3369,15 @@ class ValidatorDutiesTracker {
                                 document.getElementById('telegramChatId').value = data.settings.telegram.chatId;
                             }
                             sessionStorage.setItem('telegramEnabled', data.settings.telegram.enabled ? 'true' : 'false');
-                            this.updateNotificationStatus();
                         }
                         
                         // Restore browser notification setting
                         if (data.settings.browser) {
                             sessionStorage.setItem('browserNotifications', data.settings.browser.enabled ? 'true' : 'false');
-                            this.updateNotificationStatus();
                         }
+                        
+                        // Re-initialize notifications to update UI
+                        this.initializeNotifications();
                         
                         // Restore auto-refresh
                         if (data.settings.autoRefresh !== undefined) {
@@ -3525,6 +3557,11 @@ class ValidatorDutiesTracker {
     toggleDashboardMode() {
         this.isDashboardMode = !this.isDashboardMode;
         sessionStorage.setItem('dashboardMode', this.isDashboardMode.toString());
+        
+        // Track analytics event
+        if (typeof Analytics !== 'undefined') {
+            Analytics.trackDashboardMode(this.isDashboardMode ? 'enter' : 'exit');
+        }
         
         const toggleBtn = document.getElementById('dashboardModeToggle');
         
