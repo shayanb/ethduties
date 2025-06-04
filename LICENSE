@@ -1,0 +1,15 @@
+ethduties - Ethereum Validator Duties Tracker  
+Copyright (c) 2025 Pangana Inc.
+
+This project is licensed under the GNU Affero General Public License v3.0 (AGPL-3.0) for non-commercial, open-source use only.
+
+You may:
+- Use, modify, and share this code **only** under the terms of the AGPL-3.0 license.
+- Run your own instance as long as your source code (including frontend/backend changes) is made publicly available under the same license.
+
+You may **not**:
+- Use this code, in whole or in part, for **commercial purposes** — including but not limited to use in for-profit platforms, products, or services — without explicit written permission from Pangana Inc.
+
+To inquire about commercial licensing or exceptions, please contact: `info@pangana.com`
+
+Full license text: https://www.gnu.org/licenses/agpl-3.0.html

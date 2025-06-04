@@ -326,3 +326,13 @@ docker run -d \
 ### Backup and Restore
 
 Since all data is stored in sessionStorage on the client side, no server-side backup is needed. User settings and validators are preserved in the browser.
+
+
+
+---
+
+## License
+
+This project is open-source under the [AGPL-3.0 license](./LICENSE.md) for non-commercial use.
+
+For commercial use or licensing inquiries, please contact [info@pangana.org](mailto:info@pangana.org).
