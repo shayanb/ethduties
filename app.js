@@ -57,9 +57,37 @@ class ValidatorDutiesTracker {
     }
 
     initializeEventListeners() {
-        // Navigation
+        // Hamburger menu
+        const hamburgerMenu = document.getElementById('hamburgerMenu');
+        const hamburgerDropdown = document.getElementById('hamburgerDropdown');
+        
+        if (hamburgerMenu) {
+            hamburgerMenu.addEventListener('click', () => {
+                hamburgerMenu.classList.toggle('active');
+                hamburgerDropdown.classList.toggle('show');
+            });
+        }
+        
+        // Close dropdown when clicking outside
+        document.addEventListener('click', (e) => {
+            if (hamburgerMenu && hamburgerDropdown && 
+                !hamburgerMenu.contains(e.target) && 
+                !hamburgerDropdown.contains(e.target)) {
+                hamburgerMenu.classList.remove('active');
+                hamburgerDropdown.classList.remove('show');
+            }
+        });
+        
+        // Navigation buttons
         document.querySelectorAll('.nav-btn').forEach(btn => {
-            btn.addEventListener('click', (e) => this.switchPage(e.target.dataset.page));
+            btn.addEventListener('click', (e) => {
+                this.switchPage(e.target.dataset.page);
+                // Close hamburger menu after selection
+                if (hamburgerMenu && hamburgerDropdown) {
+                    hamburgerMenu.classList.remove('active');
+                    hamburgerDropdown.classList.remove('show');
+                }
+            });
         });
         
         document.getElementById('addValidatorBtn').addEventListener('click', () => this.addValidator());
@@ -162,8 +190,14 @@ class ValidatorDutiesTracker {
         // Dashboard mode toggle
         document.getElementById('dashboardModeToggle').addEventListener('click', () => this.toggleDashboardMode());
         
-        // Dark mode toggle
+        // Dark mode toggle (desktop)
         document.getElementById('darkModeToggle').addEventListener('click', () => this.toggleDarkMode());
+        
+        // Dropdown dark mode toggle (mobile)
+        const dropdownDarkModeToggle = document.getElementById('dropdownDarkModeToggle');
+        if (dropdownDarkModeToggle) {
+            dropdownDarkModeToggle.addEventListener('click', () => this.toggleDarkMode());
+        }
         
         // Dashboard exit button
         document.getElementById('dashboardExitBtn').addEventListener('click', () => this.exitDashboardMode());
@@ -3600,16 +3634,45 @@ class ValidatorDutiesTracker {
         const savedTheme = localStorage.getItem('darkMode') || 'light';
         document.documentElement.setAttribute('data-theme', savedTheme);
         
-        // Update toggle button icons
-        const sunIcon = document.querySelector('#darkModeToggle .sun-icon');
-        const moonIcon = document.querySelector('#darkModeToggle .moon-icon');
+        // Update main toggle button icons
+        const mainSunIcon = document.querySelector('#darkModeToggle .sun-icon');
+        const mainMoonIcon = document.querySelector('#darkModeToggle .moon-icon');
+        
+        // Update dropdown toggle button icons and label
+        const dropdownSunIcon = document.querySelector('#dropdownDarkModeToggle .sun-icon');
+        const dropdownMoonIcon = document.querySelector('#dropdownDarkModeToggle .moon-icon');
+        const darkModeLabel = document.getElementById('darkModeLabel');
         
         if (savedTheme === 'dark') {
-            sunIcon.classList.add('hidden');
-            moonIcon.classList.remove('hidden');
+            // Show sun icon (clicking will switch to light mode)
+            // Main toggle
+            if (mainSunIcon && mainMoonIcon) {
+                mainSunIcon.classList.remove('hidden');
+                mainMoonIcon.classList.add('hidden');
+            }
+            // Dropdown toggle
+            if (dropdownSunIcon && dropdownMoonIcon) {
+                dropdownSunIcon.classList.remove('hidden');
+                dropdownMoonIcon.classList.add('hidden');
+            }
+            if (darkModeLabel) {
+                darkModeLabel.textContent = 'Light Mode';
+            }
         } else {
-            sunIcon.classList.remove('hidden');
-            moonIcon.classList.add('hidden');
+            // Show moon icon (clicking will switch to dark mode)
+            // Main toggle
+            if (mainSunIcon && mainMoonIcon) {
+                mainSunIcon.classList.add('hidden');
+                mainMoonIcon.classList.remove('hidden');
+            }
+            // Dropdown toggle
+            if (dropdownSunIcon && dropdownMoonIcon) {
+                dropdownSunIcon.classList.add('hidden');
+                dropdownMoonIcon.classList.remove('hidden');
+            }
+            if (darkModeLabel) {
+                darkModeLabel.textContent = 'Dark Mode';
+            }
         }
     }
 
@@ -3686,16 +3749,45 @@ class ValidatorDutiesTracker {
         document.documentElement.setAttribute('data-theme', newTheme);
         localStorage.setItem('darkMode', newTheme);
         
-        // Update toggle button icons
-        const sunIcon = document.querySelector('#darkModeToggle .sun-icon');
-        const moonIcon = document.querySelector('#darkModeToggle .moon-icon');
+        // Update main toggle button icons
+        const mainSunIcon = document.querySelector('#darkModeToggle .sun-icon');
+        const mainMoonIcon = document.querySelector('#darkModeToggle .moon-icon');
+        
+        // Update dropdown toggle button icons and label
+        const dropdownSunIcon = document.querySelector('#dropdownDarkModeToggle .sun-icon');
+        const dropdownMoonIcon = document.querySelector('#dropdownDarkModeToggle .moon-icon');
+        const darkModeLabel = document.getElementById('darkModeLabel');
         
         if (newTheme === 'dark') {
-            sunIcon.classList.add('hidden');
-            moonIcon.classList.remove('hidden');
+            // Show sun icon (clicking will switch to light mode)
+            // Main toggle
+            if (mainSunIcon && mainMoonIcon) {
+                mainSunIcon.classList.remove('hidden');
+                mainMoonIcon.classList.add('hidden');
+            }
+            // Dropdown toggle
+            if (dropdownSunIcon && dropdownMoonIcon) {
+                dropdownSunIcon.classList.remove('hidden');
+                dropdownMoonIcon.classList.add('hidden');
+            }
+            if (darkModeLabel) {
+                darkModeLabel.textContent = 'Light Mode';
+            }
         } else {
-            sunIcon.classList.remove('hidden');
-            moonIcon.classList.add('hidden');
+            // Show moon icon (clicking will switch to dark mode)
+            // Main toggle
+            if (mainSunIcon && mainMoonIcon) {
+                mainSunIcon.classList.add('hidden');
+                mainMoonIcon.classList.remove('hidden');
+            }
+            // Dropdown toggle
+            if (dropdownSunIcon && dropdownMoonIcon) {
+                dropdownSunIcon.classList.add('hidden');
+                dropdownMoonIcon.classList.remove('hidden');
+            }
+            if (darkModeLabel) {
+                darkModeLabel.textContent = 'Dark Mode';
+            }
         }
     }
 

@@ -80,6 +80,15 @@ header {
     padding: 10px;
     border-radius: 12px;
     box-shadow: 0 1px 3px rgba(0, 0, 0, 0.1);
+    position: relative;
+}
+
+.nav-content {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    width: 100%;
+    gap: 10px;
 }
 
 .nav-left {
@@ -113,6 +122,120 @@ header {
 .nav-btn.active {
     background-color: var(--secondary-color);
     color: white;
+}
+
+/* Hamburger Menu */
+.hamburger-menu {
+    display: none;
+    background: transparent;
+    border: none;
+    cursor: pointer;
+    padding: 10px;
+    z-index: 1001;
+}
+
+.hamburger-menu span {
+    display: block;
+    width: 25px;
+    height: 3px;
+    background-color: var(--text-primary);
+    margin: 5px 0;
+    transition: all 0.3s ease;
+    border-radius: 2px;
+}
+
+.hamburger-menu.active span:nth-child(1) {
+    transform: rotate(45deg) translate(5px, 5px);
+}
+
+.hamburger-menu.active span:nth-child(2) {
+    opacity: 0;
+}
+
+.hamburger-menu.active span:nth-child(3) {
+    transform: rotate(-45deg) translate(7px, -6px);
+}
+
+/* Hamburger Dropdown */
+.hamburger-dropdown {
+    display: none;
+    position: absolute;
+    top: 100%;
+    right: 0;
+    background: var(--card-bg);
+    box-shadow: 0 4px 6px rgba(0, 0, 0, 0.1);
+    border-radius: 8px;
+    margin-top: 10px;
+    padding: 10px;
+    min-width: 150px;
+    z-index: 1000;
+}
+
+.hamburger-dropdown.show {
+    display: block;
+}
+
+.hamburger-dropdown .nav-btn {
+    width: 100%;
+    margin-bottom: 5px;
+    text-align: left;
+}
+
+.hamburger-dropdown .nav-btn:last-child {
+    margin-bottom: 0;
+}
+
+/* Dropdown divider and dark mode toggle */
+.dropdown-divider {
+    height: 1px;
+    background-color: var(--border-color);
+    margin: 10px 0;
+}
+
+.dropdown-dark-mode-toggle {
+    width: 100%;
+}
+
+.dropdown-dark-mode-btn {
+    width: 100%;
+    padding: 10px 12px;
+    border: none;
+    border-radius: 6px;
+    background: transparent;
+    color: var(--text-primary);
+    cursor: pointer;
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    font-size: 0.9rem;
+    transition: all 0.3s;
+}
+
+.dropdown-dark-mode-btn:hover {
+    background-color: var(--bg-color);
+}
+
+.dropdown-dark-mode-btn .sun-icon,
+.dropdown-dark-mode-btn .moon-icon {
+    transition: all 0.3s ease;
+}
+
+.dropdown-dark-mode-btn .moon-icon.hidden,
+.dropdown-dark-mode-btn .sun-icon.hidden {
+    display: none;
+}
+
+.dark-mode-label {
+    font-weight: 500;
+}
+
+/* Mobile-only and mobile-hidden classes */
+.mobile-only {
+    display: none;
+}
+
+.mobile-hidden {
+    display: block;
 }
 
 /* Page Management */
@@ -318,6 +441,33 @@ input[type="checkbox"] {
 }
 
 @media (max-width: 768px) {
+    /* Navigation responsive */
+    .mobile-only {
+        display: block;
+    }
+    
+    .mobile-hidden {
+        display: none;
+    }
+    
+    .hamburger-menu {
+        display: block;
+    }
+    
+    .nav-left {
+        gap: 5px;
+    }
+    
+    .nav-btn {
+        padding: 10px 16px;
+        font-size: 0.9rem;
+    }
+    
+    /* Hide main dark mode toggle on mobile */
+    .dark-mode-toggle.mobile-hidden {
+        display: none !important;
+    }
+    
     .form-content {
         flex-direction: column;
         align-items: stretch;
@@ -2867,6 +3017,27 @@ footer {
     border: 1px solid var(--border-color);
 }
 
+[data-theme="dark"] .hamburger-menu span {
+    background-color: var(--text-primary);
+}
+
+[data-theme="dark"] .hamburger-dropdown {
+    background: var(--card-bg);
+    box-shadow: 0 4px 6px rgba(0, 0, 0, 0.3);
+}
+
+[data-theme="dark"] .dropdown-divider {
+    background-color: var(--border-color);
+}
+
+[data-theme="dark"] .dropdown-dark-mode-btn {
+    color: var(--text-primary);
+}
+
+[data-theme="dark"] .dropdown-dark-mode-btn:hover {
+    background-color: var(--bg-color);
+}
+
 [data-theme="dark"] .nav-btn:hover {
     background-color: var(--bg-color);
 }
@@ -2886,6 +3057,17 @@ footer {
 [data-theme="dark"] .add-validator-form {
     background-color: var(--bg-color);
     border-color: var(--border-color);
+}
+
+[data-theme="dark"] .batch-operations button {
+    background-color: var(--bg-color);
+    border-color: var(--border-color);
+    color: var(--text-primary);
+}
+
+[data-theme="dark"] .batch-operations button:hover {
+    background-color: var(--border-color);
+    border-color: var(--text-secondary);
 }
 
 [data-theme="dark"] .validators-list li {
