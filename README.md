@@ -1,6 +1,6 @@
 # ETH Duties Tracker
 
-A web application for tracking Ethereum validator duties with real-time notifications via browser push and Telegram.
+A [web application](https://ethduti.es/) for tracking Ethereum validator duties with real-time notifications via browser push and Telegram.
 
 ## Features
 
@@ -327,7 +327,21 @@ docker run -d \
 
 Since all data is stored in sessionStorage on the client side, no server-side backup is needed. User settings and validators are preserved in the browser.
 
+## Support the Project
 
+ETH Duties Tracker is completely free and open-source. If you find it useful for tracking your validator duties, consider supporting its development and maintenance:
+
+- **Ethereum & EVM Chains:** `0x5214e7601682dEE3397666b8bBaeDBD682d19186`
+- Support the project through [Buy Me a Coffee](https://buymeacoffee.com/pangana)
+
+### 🌟 Other Ways to Support
+
+- ⭐ **Star this repository** on GitHub
+- 🐛 **Report issues** and suggest improvements
+- 🔄 **Share** with fellow validators
+- 🤝 **Contribute** code or documentation
+
+Your support helps keep this tool free, ad-free, and continuously improved for the Ethereum validator community!
 
 ---
 

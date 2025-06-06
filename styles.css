@@ -1857,6 +1857,172 @@ footer {
     text-decoration: none;
 }
 
+/* Coffee button styles */
+button.social-icon.coffee-button {
+    background: none;
+    border: none;
+    cursor: pointer;
+    font-size: 0.9rem;
+    font-family: inherit;
+    padding: 0;
+}
+
+button.social-icon.coffee-button:hover {
+    color: var(--secondary-color);
+}
+
+/* Donation Modal Color Overrides to match website theme */
+.donation-modal {
+    --bg-container: var(--card-bg) !important;
+    --color-text: var(--text-primary) !important;
+    --color-muted: var(--text-secondary) !important;
+    --color-accent: var(--secondary-color) !important;
+    --color-accent-hover: #5470ea !important;
+    --bg-primary: var(--bg-color) !important;
+    --border-color: var(--border-color) !important;
+    --color-text-secondary: var(--text-secondary) !important;
+    --highlight-bg: #f1f5f9 !important;
+    --box-shadow: 0 4px 6px rgba(0,0,0,.1) !important;
+}
+
+/* Override donation modal colors in dark mode */
+[data-theme="dark"] .donation-modal {
+    --bg-container: var(--card-bg) !important;
+    --color-text: var(--text-primary) !important;
+    --color-muted: var(--text-secondary) !important;
+    --color-accent: var(--secondary-color) !important;
+    --color-accent-hover: #5470ea !important;
+    --bg-primary: var(--bg-color) !important;
+    --border-color: var(--border-color) !important;
+    --color-text-secondary: var(--text-secondary) !important;
+    --highlight-bg: var(--border-color) !important;
+    --box-shadow: 0 4px 6px rgba(0,0,0,.3) !important;
+}
+
+/* Fix alignment and spacing issues */
+.donation-modal .crypto-donation {
+    align-items: stretch !important;
+    min-height: 140px;
+}
+
+.donation-modal .crypto-info {
+    height: auto !important;
+    min-height: 120px;
+    justify-content: flex-start !important;
+}
+
+.donation-modal .donation-method {
+    background: var(--bg-primary) !important;
+    border: 1px solid var(--border-color) !important;
+    border-radius: 8px !important;
+    padding: 15px !important;
+}
+
+.donation-modal .eth-qr {
+    align-self: flex-start !important;
+    margin-top: 5px !important;
+}
+
+/* Make addresses more readable */
+.donation-modal .donation-address {
+    background: var(--bg-container) !important;
+    border: 1px solid var(--border-color) !important;
+    color: var(--color-text) !important;
+}
+
+.donation-modal .donation-address:hover {
+    background: var(--highlight-bg) !important;
+}
+
+/* Style the Buy Me Coffee button to match website */
+.donation-modal .bmc-link {
+    background: linear-gradient(135deg, var(--primary-color), var(--secondary-color)) !important;
+    color: white !important;
+    border-radius: 8px !important;
+    padding: 12px 20px !important;
+    font-weight: 600 !important;
+}
+
+.donation-modal .bmc-link:hover {
+    background: linear-gradient(135deg, #2c2c5e, #5470ea) !important;
+    transform: translateY(-1px) !important;
+}
+
+/* Additional specific overrides for all modal elements */
+.donation-modal .donation-content {
+    background-color: var(--card-bg) !important;
+    color: var(--text-primary) !important;
+    border: 1px solid var(--border-color) !important;
+}
+
+.donation-modal .donation-content h3 {
+    color: var(--text-primary) !important;
+}
+
+.donation-modal .donation-content p {
+    color: var(--text-secondary) !important;
+}
+
+.donation-modal .donation-close {
+    color: var(--text-secondary) !important;
+}
+
+.donation-modal .donation-close:hover {
+    color: var(--text-primary) !important;
+}
+
+.donation-modal .crypto-address-container p {
+    color: var(--text-secondary) !important;
+}
+
+.donation-modal .donation-separator span {
+    color: var(--text-secondary) !important;
+}
+
+.donation-modal .donation-separator::before,
+.donation-modal .donation-separator::after {
+    background: var(--border-color) !important;
+}
+
+/* Dark mode specific overrides */
+[data-theme="dark"] .donation-modal .donation-content {
+    background-color: var(--card-bg) !important;
+    color: var(--text-primary) !important;
+    border: 1px solid var(--border-color) !important;
+}
+
+[data-theme="dark"] .donation-modal .donation-method {
+    background: var(--bg-color) !important;
+    border: 1px solid var(--border-color) !important;
+}
+
+[data-theme="dark"] .donation-modal .donation-address {
+    background: var(--card-bg) !important;
+    border: 1px solid var(--border-color) !important;
+    color: var(--text-primary) !important;
+}
+
+[data-theme="dark"] .donation-modal .donation-address:hover {
+    background: var(--bg-color) !important;
+}
+
+/* Mobile responsive styles for coffee button */
+@media (max-width: 768px) {
+    .footer-social {
+        flex-direction: column;
+        gap: 15px;
+    }
+    
+    .footer-social .social-item:last-child {
+        margin-top: 5px;
+    }
+    
+    .footer-social .social-item:last-child .social-icon svg {
+        width: 24px;
+        height: 24px;
+    }
+}
+
 .social-icon span {
     font-size: 0.9rem;
 }

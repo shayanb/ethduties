@@ -4328,6 +4328,26 @@ class ValidatorDutiesTracker {
 
 const app = new ValidatorDutiesTracker();
 
+// Initialize donation modal
+document.addEventListener('DOMContentLoaded', () => {
+    if (typeof DonationModal !== 'undefined') {
+        const donationModal = new DonationModal({
+            ethAddress: '0x5214e7601682dEE3397666b8bBaeDBD682d19186',
+            btcAddress: '3BHETs8Fby8RmYhuqQqFBLfc7vMYD1R1mA',
+            buyMeCoffeeUrl: 'https://buymeacoffee.com/pangana',
+            modalTitle: 'Support free software',
+            modalDescription: 'If ETHDuties has been helpful for tracking your validator duties, consider supporting its development!'
+        });
+        donationModal.init();
+        
+        // Attach to the coffee button
+        const donateBtn = document.getElementById('donate-btn');
+        if (donateBtn) {
+            donationModal.attachToTrigger(donateBtn);
+        }
+    }
+});
+
 // Clean up intervals on page unload
 window.addEventListener('beforeunload', () => {
     if (app.autoRefreshInterval) clearInterval(app.autoRefreshInterval);
