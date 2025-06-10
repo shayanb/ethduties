@@ -1,16 +1,55 @@
 # ETH Duties Tracker
 
-A [web application](https://ethduti.es/) for tracking Ethereum validator duties with real-time notifications via browser push and Telegram.
+Ethereum validators need timely awareness of their upcoming duties to ensure optimal performance and avoid penalties. While existing tools like beaconcha.in provide basic duty information, they lack advanced notifications and privacy-focused design. [ETHDuties](https://ethduti.es/) Tracker addresses these gaps by providing a self-hosted solution that delivers early warnings for critical duties while keeping your validator data private and local, with real-time notifications via browser push and Telegram.
 
-## Features
 
-- **Real-time Duty Tracking**: Monitor proposer, attester, and sync committee duties
-- **Multiple Notification Channels**: Browser push notifications and Telegram alerts
-- **Session Caching**: All data cached in sessionStorage for quick access
-- **Auto-refresh**: Optional automatic duty updates every 30 seconds
-- **CORS Proxy**: Built-in Node.js server to handle beacon node API calls
-- **Visual Urgency Indicators**: Color-coded duties based on time remaining
-- **Docker Support**: Easy deployment with Docker and Portainer
+- [ETH Duties Tracker](#eth-duties-tracker)
+  - [Key Features](#key-features)
+  - [Quick Start with Docker](#quick-start-with-docker)
+    - [Using Docker Compose](#using-docker-compose)
+    - [Using Portainer](#using-portainer)
+    - [Building Docker Image](#building-docker-image)
+  - [Setup (Non-Docker)](#setup-non-docker)
+    - [1. Install Dependencies](#1-install-dependencies)
+    - [2. Configure Environment](#2-configure-environment)
+      - [Required Configuration:](#required-configuration)
+      - [Optional Configuration:](#optional-configuration)
+    - [3. Start the Server](#3-start-the-server)
+    - [4. Access the Application](#4-access-the-application)
+  - [Usage](#usage)
+  - [Notification Settings](#notification-settings)
+  - [Import/Export Format](#importexport-format)
+    - [CSV Format](#csv-format)
+    - [JSON Format](#json-format)
+  - [Testing \& Debugging](#testing--debugging)
+    - [Missed Attestation Testing](#missed-attestation-testing)
+    - [Console Testing Workflow](#console-testing-workflow)
+    - [Real Attestation Monitoring](#real-attestation-monitoring)
+  - [Technical Details](#technical-details)
+  - [API Endpoints](#api-endpoints)
+  - [Docker Deployment](#docker-deployment)
+    - [Environment Variables](#environment-variables)
+    - [Docker Compose Files](#docker-compose-files)
+    - [Portainer Deployment](#portainer-deployment)
+    - [Reverse Proxy Setup (Traefik)](#reverse-proxy-setup-traefik)
+    - [Health Monitoring](#health-monitoring)
+    - [Auto-updates](#auto-updates)
+    - [Backup and Restore](#backup-and-restore)
+  - [Support the Project](#support-the-project)
+    - [🌟 Other Ways to Support](#-other-ways-to-support)
+  - [License](#license)
+
+
+
+## Key Features
+
+- **Early Sync Committee Alerts**: Receive notifications up to ~27 hours (256 epochs) before your validator becomes part of the sync committee - crucial for planning and preparation
+- **Advanced Block Proposal Notifications**: Get notified up to 6 minutes in advance when your validator will propose a block (This will increase with [EIP-7917](https://eips.ethereum.org/EIPS/eip-7917))
+- **Enhanced Privacy**: Your validator sets are not clustered or linked together in any centralized service - all data stays local in your browser
+- **Multiple Notification Channels**: Desktop browser notifications and Telegram alerts with customizable timing
+- **Docker Support**: Easy self-hosted deployment with Docker and Portainer for complete control
+- **Dashboard Mode**: Full-screen real-time monitoring view perfect for NOC displays and dedicated monitoring setups
+- **Real-time Duty Tracking**: Monitor proposer, attester, and sync committee duties with automatic updates
 
 ## Quick Start with Docker
 
@@ -111,26 +150,33 @@ Open http://localhost:3000 in your browser.
 
 1. **Configure Beacon Node**: 
    - Use local beacon node (default: http://localhost:5052)
-   - Or check "Use Public Beacon Node" for a pre-configured public endpoint
+   - Or select a public beacon node from the dropdown in Settings (note: public nodes may have rate limits)
 
 2. **Add Validators**:
    - Enter validator public key (0x...) or validator index
    - Paste comma-separated list of validators (e.g., `1234,5678,9012`)
    - Import from JSON file using the Import button (includes all settings)
    - Export all validators with labels and settings using the Export button
+   - Customize validator labels by clicking on any validator's public key
 
 3. **Fetch Duties**:
    - Click "Fetch Duties" to retrieve upcoming duties
    - Enable auto-refresh for automatic updates
 
 4. **Enable Notifications**:
-   - **Browser**: Click "Enable Browser Notifications"
-   - **Telegram**: Start chat with your bot, send `/start`, copy chat ID, and enable
+   - **Desktop**: Click "Enable Desktop Notifications" for browser-based notifications
+   - **Telegram**: Start chat with [@EthDuties_bot](https://t.me/EthDuties_bot), send `/start` to get your chat ID, enter it in Settings, and click "Enable Telegram Notifications"
+
+5. **Dashboard Mode**:
+   - Click "Dashboard Mode" at the bottom of the page for a full-screen monitoring view
+   - Perfect for displaying on dedicated monitors or TV screens
 
 ## Notification Settings
 
-- Choose which duty types to notify about
-- Set notification threshold (5 min to 1 hour before duty)
+- Choose which duty types to notify about (proposer duties, attester duties, sync committee duties)
+- Set notification threshold (5 minutes to 1 hour before duty)
+- Configure separate settings for desktop and Telegram notifications
+- Desktop notifications can include sound and persistent display options
 - Notifications automatically trigger when duties approach
 
 ## Import/Export Format
@@ -230,9 +276,10 @@ In production, missed attestations are detected by:
 
 This would require significant additional API calls to the beacon node and more complex data processing.
 
+
 ## Technical Details
 
-- Frontend uses vanilla JavaScript with sessionStorage for caching
+- Frontend uses vanilla JavaScript with localStorage for caching
 - Backend Node.js server provides CORS proxy for beacon node APIs
 - Supports all major Ethereum consensus clients
 - Inspired by [eth-duties](https://github.com/TobiWo/eth-duties)
@@ -325,7 +372,7 @@ docker run -d \
 
 ### Backup and Restore
 
-Since all data is stored in sessionStorage on the client side, no server-side backup is needed. User settings and validators are preserved in the browser.
+Since all data is stored in localStorage on the client side, no server-side backup is needed. User settings and validators are preserved in the browser. Use the Export/Import functionality to backup your validator configuration.
 
 ## Support the Project
 
