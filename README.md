@@ -2,9 +2,13 @@
 
 Ethereum validators need timely awareness of their upcoming duties to ensure optimal performance and avoid penalties. While existing tools like beaconcha.in provide basic duty information, they lack advanced notifications and privacy-focused design. [ETHDuties](https://ethduti.es/) Tracker addresses these gaps by providing a self-hosted solution that delivers early warnings for critical duties while keeping your validator data private and local, with real-time notifications via browser push and Telegram.
 
-
 - [ETH Duties Tracker](#eth-duties-tracker)
   - [Key Features](#key-features)
+  - [Usage](#usage)
+  - [Notification Settings](#notification-settings)
+  - [Import/Export Format](#importexport-format)
+    - [CSV Format](#csv-format)
+    - [JSON Format](#json-format)
   - [Quick Start with Docker](#quick-start-with-docker)
     - [Using Docker Compose](#using-docker-compose)
     - [Using Portainer](#using-portainer)
@@ -16,11 +20,6 @@ Ethereum validators need timely awareness of their upcoming duties to ensure opt
       - [Optional Configuration:](#optional-configuration)
     - [3. Start the Server](#3-start-the-server)
     - [4. Access the Application](#4-access-the-application)
-  - [Usage](#usage)
-  - [Notification Settings](#notification-settings)
-  - [Import/Export Format](#importexport-format)
-    - [CSV Format](#csv-format)
-    - [JSON Format](#json-format)
   - [Testing \& Debugging](#testing--debugging)
     - [Missed Attestation Testing](#missed-attestation-testing)
     - [Console Testing Workflow](#console-testing-workflow)
@@ -50,6 +49,83 @@ Ethereum validators need timely awareness of their upcoming duties to ensure opt
 - **Docker Support**: Easy self-hosted deployment with Docker and Portainer for complete control
 - **Dashboard Mode**: Full-screen real-time monitoring view perfect for NOC displays and dedicated monitoring setups
 - **Real-time Duty Tracking**: Monitor proposer, attester, and sync committee duties with automatic updates
+
+
+## Usage
+
+Go to [https://ethduti.es/](https://ethduti.es/) or your local instance ((http://localhost:3000)[http://localhost:3000]) to start using the ETH Duties Tracker.
+
+
+1. **Configure Beacon Node**: 
+   - Use local beacon node (defaults to a public RPC node)
+   - Or select a public beacon node from the dropdown in Settings (note: public nodes may have rate limits)
+
+2. **Add Validators**:
+   - Enter validator public key (0x...) or validator index
+   - Paste comma-separated list of validators (e.g., `1234,5678,9012`)
+   - Import from JSON file using the Import button (includes all settings)
+   - Export all validators with labels and settings using the Export button
+   - Customize validator labels by clicking on any validator's public key
+
+3. **Fetch Duties**:
+   - Click "Fetch Duties" to retrieve upcoming duties
+   - Enable auto-refresh for automatic updates
+
+4. **Enable Notifications**:
+   - **Desktop**: Click "Enable Desktop Notifications" for browser-based notifications
+   - **Telegram**: Start chat with [@EthDuties_bot](https://t.me/EthDuties_bot), send `/start` to get your chat ID, enter it in Settings, and click "Enable Telegram Notifications"
+
+5. **Dashboard Mode**:
+   - Click "Dashboard Mode" at the bottom of the page for a full-screen monitoring view
+   - Perfect for displaying on dedicated monitors or TV screens
+
+## Notification Settings
+
+- Choose which duty types to notify about (proposer duties, attester duties, sync committee duties)
+- Set notification threshold (5 minutes to 1 hour before duty)
+- Configure separate settings for desktop and Telegram notifications
+- Desktop notifications can include sound and persistent display options
+- Notifications automatically trigger when duties approach
+
+## Import/Export Format
+
+### CSV Format
+Simply paste a comma-separated list of validators:
+```
+1234,5678,9012,0x1234...5678
+```
+
+### JSON Format
+```json
+{
+  "version": "1.1",
+  "exportDate": "2024-01-01T00:00:00.000Z",
+  "settings": {
+    "beaconUrl": "http://localhost:5052",
+    "notifications": {
+      "proposer": true,
+      "attester": true,
+      "sync": true,
+      "minutesBefore": 5
+    },
+    "telegram": {
+      "enabled": true,
+      "chatId": "123456789"
+    },
+    "browser": {
+      "enabled": true
+    },
+    "autoRefresh": true
+  },
+  "validators": [
+    {
+      "index": 1234,
+      "label": "My Validator 1",
+      "pubkey": "0x..." // Added during export if available
+    }
+  ]
+}
+```
 
 ## Quick Start with Docker
 
@@ -145,79 +221,6 @@ npm run dev
 ### 4. Access the Application
 
 Open http://localhost:3000 in your browser.
-
-## Usage
-
-1. **Configure Beacon Node**: 
-   - Use local beacon node (default: http://localhost:5052)
-   - Or select a public beacon node from the dropdown in Settings (note: public nodes may have rate limits)
-
-2. **Add Validators**:
-   - Enter validator public key (0x...) or validator index
-   - Paste comma-separated list of validators (e.g., `1234,5678,9012`)
-   - Import from JSON file using the Import button (includes all settings)
-   - Export all validators with labels and settings using the Export button
-   - Customize validator labels by clicking on any validator's public key
-
-3. **Fetch Duties**:
-   - Click "Fetch Duties" to retrieve upcoming duties
-   - Enable auto-refresh for automatic updates
-
-4. **Enable Notifications**:
-   - **Desktop**: Click "Enable Desktop Notifications" for browser-based notifications
-   - **Telegram**: Start chat with [@EthDuties_bot](https://t.me/EthDuties_bot), send `/start` to get your chat ID, enter it in Settings, and click "Enable Telegram Notifications"
-
-5. **Dashboard Mode**:
-   - Click "Dashboard Mode" at the bottom of the page for a full-screen monitoring view
-   - Perfect for displaying on dedicated monitors or TV screens
-
-## Notification Settings
-
-- Choose which duty types to notify about (proposer duties, attester duties, sync committee duties)
-- Set notification threshold (5 minutes to 1 hour before duty)
-- Configure separate settings for desktop and Telegram notifications
-- Desktop notifications can include sound and persistent display options
-- Notifications automatically trigger when duties approach
-
-## Import/Export Format
-
-### CSV Format
-Simply paste a comma-separated list of validators:
-```
-1234,5678,9012,0x1234...5678
-```
-
-### JSON Format
-```json
-{
-  "version": "1.1",
-  "exportDate": "2024-01-01T00:00:00.000Z",
-  "settings": {
-    "beaconUrl": "http://localhost:5052",
-    "notifications": {
-      "proposer": true,
-      "attester": true,
-      "sync": true,
-      "minutesBefore": 5
-    },
-    "telegram": {
-      "enabled": true,
-      "chatId": "123456789"
-    },
-    "browser": {
-      "enabled": true
-    },
-    "autoRefresh": true
-  },
-  "validators": [
-    {
-      "index": 1234,
-      "label": "My Validator 1",
-      "pubkey": "0x..." // Added during export if available
-    }
-  ]
-}
-```
 
 ## Testing & Debugging
 
@@ -396,4 +399,4 @@ Your support helps keep this tool free, ad-free, and continuously improved for t
 
 This project is open-source under the [AGPL-3.0 license](./LICENSE.md) for non-commercial use.
 
-For commercial use or licensing inquiries, please contact [info@pangana.org](mailto:info@pangana.org).
+For commercial use or licensing inquiries, please contact [info@pangana.com](mailto:info@pangana.com).
