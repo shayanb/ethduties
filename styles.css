@@ -3378,7 +3378,6 @@ button.social-icon.coffee-button:hover {
 }
 
 [data-theme="dark"] .sync-committee-summary {
-    background-color: var(--bg-color);
 }
 
 [data-theme="dark"] .sync-summary-item {
@@ -3422,4 +3421,58 @@ button.social-icon.coffee-button:hover {
 
 [data-theme="dark"] .dashboard-exit-btn:hover {
     background-color: #dc2626;
+}
+
+/* Network Overview dark mode improvements */
+[data-theme="dark"] .proposer-card {
+    background-color: #2d3748;
+    border: 1px solid #4a5568;
+    color: var(--text-primary);
+}
+
+[data-theme="dark"] .proposer-card:hover {
+    background-color: #374151;
+    border-color: var(--secondary-color);
+    box-shadow: 0 4px 12px rgba(0, 0, 0, 0.3);
+}
+
+[data-theme="dark"] .proposer-card.tracked {
+    background-color: rgba(96, 165, 250, 0.25);
+    border-color: var(--secondary-color);
+    box-shadow: 0 0 8px rgba(96, 165, 250, 0.3);
+}
+
+[data-theme="dark"] .proposer-card.past {
+    background-color: #1a202c;
+    opacity: 0.7;
+    border-color: #2d3748;
+}
+
+[data-theme="dark"] .proposer-card.past .proposer-slot {
+    color: #718096;
+}
+
+[data-theme="dark"] .proposer-card.proposing {
+    background-color: rgba(52, 211, 153, 0.25);
+    border-color: var(--success-color);
+    box-shadow: 0 0 16px rgba(52, 211, 153, 0.4);
+}
+
+[data-theme="dark"] .proposer-slot {
+    color: #60a5fa;
+    font-weight: 600;
+}
+
+[data-theme="dark"] .proposer-time {
+    color: #9ca3af;
+}
+
+[data-theme="dark"] .proposer-validator {
+    background-color: var(--secondary-color);
+    color: white;
+    font-weight: 600;
+}
+
+[data-theme="dark"] .block-proposer {
+    color: #d1d5db;
 }
