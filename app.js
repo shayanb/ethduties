@@ -3074,6 +3074,23 @@ class ValidatorDutiesTracker {
         document.getElementById('syncCommitteeModal').classList.remove('active');
     }
     
+    syncTelegramNotificationCheckboxes() {
+        // Sync Telegram checkboxes with current localStorage values
+        ['notifyProposerTelegram', 'notifyAttesterTelegram', 'notifySyncTelegram'].forEach(id => {
+            const elem = document.getElementById(id);
+            if (elem) {
+                const baseId = id.replace('Telegram', '');
+                elem.checked = localStorage.getItem(baseId) !== 'false';
+            }
+        });
+        
+        // Sync Telegram minutes dropdown
+        const telegramMinutesElem = document.getElementById('notifyMinutesTelegram');
+        if (telegramMinutesElem) {
+            telegramMinutesElem.value = localStorage.getItem('notifyMinutes') || '10';
+        }
+    }
+
     loadNotificationSettings() {
         // Load saved settings
         const settings = {
@@ -3109,6 +3126,12 @@ class ValidatorDutiesTracker {
         ['notifyProposer', 'notifyAttester', 'notifySync'].forEach(id => {
             document.getElementById(id).addEventListener('change', (e) => {
                 localStorage.setItem(id, e.target.checked);
+                // Also update the corresponding Telegram checkbox
+                const telegramId = id + 'Telegram';
+                const telegramElem = document.getElementById(telegramId);
+                if (telegramElem) {
+                    telegramElem.checked = e.target.checked;
+                }
                 this.sendNotificationSettingsUpdate();
             });
         });
@@ -3126,6 +3149,11 @@ class ValidatorDutiesTracker {
         
         document.getElementById('notifyMinutes').addEventListener('change', (e) => {
             localStorage.setItem('notifyMinutes', e.target.value);
+            // Also update the Telegram minutes dropdown
+            const telegramMinutesElem = document.getElementById('notifyMinutesTelegram');
+            if (telegramMinutesElem) {
+                telegramMinutesElem.value = e.target.value;
+            }
             this.sendNotificationSettingsUpdate();
         });
         
@@ -3136,11 +3164,10 @@ class ValidatorDutiesTracker {
                 elem.addEventListener('change', (e) => {
                     const baseId = id.replace('Telegram', '');
                     localStorage.setItem(baseId, e.target.checked);
+                    // Also update the corresponding browser notification checkbox
+                    document.getElementById(baseId).checked = e.target.checked;
                     this.sendNotificationSettingsUpdate();
                 });
-                // Sync initial state with regular settings
-                const baseId = id.replace('Telegram', '');
-                elem.checked = localStorage.getItem(baseId) !== 'false';
             }
         });
         
@@ -3152,9 +3179,10 @@ class ValidatorDutiesTracker {
                 document.getElementById('notifyMinutes').value = e.target.value;
                 this.sendNotificationSettingsUpdate();
             });
-            // Sync initial value
-            telegramMinutesElem.value = settings.notifyMinutes;
         }
+        
+        // Initial sync of Telegram checkboxes with current settings
+        this.syncTelegramNotificationCheckboxes();
     }
 
     cacheDuties() {
@@ -3473,10 +3501,101 @@ class ValidatorDutiesTracker {
                         
                         // Restore notification settings
                         if (data.settings.notifications) {
-                            document.getElementById('notifyProposer').checked = data.settings.notifications.proposer || false;
-                            document.getElementById('notifyAttester').checked = data.settings.notifications.attester || false;
-                            document.getElementById('notifySync').checked = data.settings.notifications.sync || false;
-                            document.getElementById('notifyMinutes').value = data.settings.notifications.minutesBefore || 5;
+                            // Handle new nested format
+                            if (data.settings.notifications.browser) {
+                                const browser = data.settings.notifications.browser;
+                                document.getElementById('notifyProposer').checked = browser.proposer !== undefined ? browser.proposer : true;
+                                document.getElementById('notifyAttester').checked = browser.attester !== undefined ? browser.attester : true;
+                                document.getElementById('notifySync').checked = browser.sync !== undefined ? browser.sync : true;
+                                document.getElementById('notifyMissed').checked = browser.missed || false;
+                                document.getElementById('notifyMinutes').value = browser.minutesBefore || 10;
+                                
+                                // Store in localStorage for persistence (will be overridden by telegram settings if they exist)
+                                localStorage.setItem('notifyProposer', browser.proposer !== false ? 'true' : 'false');
+                                localStorage.setItem('notifyAttester', browser.attester !== false ? 'true' : 'false');
+                                localStorage.setItem('notifySync', browser.sync !== false ? 'true' : 'false');
+                                localStorage.setItem('notifyMissed', browser.missed ? 'true' : 'false');
+                                localStorage.setItem('notifyMinutes', browser.minutesBefore?.toString() || '10');
+                                
+                                // Desktop settings
+                                if (browser.desktopSound !== undefined) {
+                                    localStorage.setItem('desktopSound', browser.desktopSound ? 'true' : 'false');
+                                    const soundElem = document.getElementById('desktopSound');
+                                    if (soundElem) soundElem.checked = browser.desktopSound;
+                                }
+                                if (browser.desktopPersistent !== undefined) {
+                                    localStorage.setItem('desktopPersistent', browser.desktopPersistent ? 'true' : 'false');
+                                    const persistentElem = document.getElementById('desktopPersistent');
+                                    if (persistentElem) persistentElem.checked = browser.desktopPersistent;
+                                }
+                            } 
+                            // Handle legacy flat format for backwards compatibility
+                            else if (data.settings.notifications.proposer !== undefined) {
+                                document.getElementById('notifyProposer').checked = data.settings.notifications.proposer || false;
+                                document.getElementById('notifyAttester').checked = data.settings.notifications.attester || false;
+                                document.getElementById('notifySync').checked = data.settings.notifications.sync || false;
+                                document.getElementById('notifyMinutes').value = data.settings.notifications.minutesBefore || 5;
+                                
+                                // Store in localStorage for persistence
+                                localStorage.setItem('notifyProposer', data.settings.notifications.proposer ? 'true' : 'false');
+                                localStorage.setItem('notifyAttester', data.settings.notifications.attester ? 'true' : 'false');
+                                localStorage.setItem('notifySync', data.settings.notifications.sync ? 'true' : 'false');
+                                localStorage.setItem('notifyMinutes', data.settings.notifications.minutesBefore?.toString() || '10');
+                                
+                                // Desktop settings (legacy)
+                                if (data.settings.notifications.desktopSound !== undefined) {
+                                    localStorage.setItem('desktopSound', data.settings.notifications.desktopSound ? 'true' : 'false');
+                                    const soundElem = document.getElementById('desktopSound');
+                                    if (soundElem) soundElem.checked = data.settings.notifications.desktopSound;
+                                }
+                                if (data.settings.notifications.desktopPersistent !== undefined) {
+                                    localStorage.setItem('desktopPersistent', data.settings.notifications.desktopPersistent ? 'true' : 'false');
+                                    const persistentElem = document.getElementById('desktopPersistent');
+                                    if (persistentElem) persistentElem.checked = data.settings.notifications.desktopPersistent;
+                                }
+                            }
+                            
+                            // Handle Telegram notification preferences
+                            if (data.settings.notifications.telegram) {
+                                const telegram = data.settings.notifications.telegram;
+                                const proposerTelegramElem = document.getElementById('notifyProposerTelegram');
+                                const attesterTelegramElem = document.getElementById('notifyAttesterTelegram');
+                                const syncTelegramElem = document.getElementById('notifySyncTelegram');
+                                const missedTelegramElem = document.getElementById('notifyMissedTelegram');
+                                const minutesTelegramElem = document.getElementById('notifyMinutesTelegram');
+                                
+                                // Set UI elements and store in localStorage for persistence
+                                if (proposerTelegramElem) {
+                                    const proposerValue = telegram.proposer !== undefined ? telegram.proposer : true;
+                                    proposerTelegramElem.checked = proposerValue;
+                                    // Since Telegram settings sync with browser settings, store in corresponding localStorage keys
+                                    localStorage.setItem('notifyProposer', proposerValue ? 'true' : 'false');
+                                }
+                                
+                                if (attesterTelegramElem) {
+                                    const attesterValue = telegram.attester !== undefined ? telegram.attester : true;
+                                    attesterTelegramElem.checked = attesterValue;
+                                    localStorage.setItem('notifyAttester', attesterValue ? 'true' : 'false');
+                                }
+                                
+                                if (syncTelegramElem) {
+                                    const syncValue = telegram.sync !== undefined ? telegram.sync : true;
+                                    syncTelegramElem.checked = syncValue;
+                                    localStorage.setItem('notifySync', syncValue ? 'true' : 'false');
+                                }
+                                
+                                if (missedTelegramElem) {
+                                    const missedValue = telegram.missed || false;
+                                    missedTelegramElem.checked = missedValue;
+                                    localStorage.setItem('notifyMissed', missedValue ? 'true' : 'false');
+                                }
+                                
+                                if (minutesTelegramElem) {
+                                    const minutesValue = telegram.minutesBefore || 10;
+                                    minutesTelegramElem.value = minutesValue;
+                                    localStorage.setItem('notifyMinutes', minutesValue.toString());
+                                }
+                            }
                         }
                         
                         // Restore Telegram settings
@@ -3496,6 +3615,12 @@ class ValidatorDutiesTracker {
                         // Re-initialize notifications to update UI
                         this.initializeNotifications();
                         
+                        // Re-load and apply all notification settings to ensure UI consistency
+                        this.loadNotificationSettings();
+                        
+                        // Re-sync Telegram checkboxes with imported notification settings
+                        this.syncTelegramNotificationCheckboxes();
+                        
                         // Restore auto-refresh
                         if (data.settings.autoRefresh !== undefined) {
                             localStorage.setItem('autoRefresh', data.settings.autoRefresh ? 'true' : 'false');
@@ -3503,6 +3628,18 @@ class ValidatorDutiesTracker {
                             if (data.settings.autoRefresh) {
                                 this.startAutoRefresh();
                             }
+                        }
+                        
+                        // Restore dark mode theme
+                        if (data.settings.darkMode) {
+                            localStorage.setItem('darkMode', data.settings.darkMode);
+                            document.documentElement.setAttribute('data-theme', data.settings.darkMode);
+                            this.initializeDarkMode(); // Update UI to reflect theme
+                        }
+                        
+                        // Restore validator labels
+                        if (data.settings.validatorLabels && typeof data.settings.validatorLabels === 'object') {
+                            localStorage.setItem('validatorLabels', JSON.stringify(data.settings.validatorLabels));
                         }
                         
                         settingsRestored = true;
@@ -3580,15 +3717,27 @@ class ValidatorDutiesTracker {
         }
         
         const exportData = {
-            version: '1.1',
+            version: '1.2',
             exportDate: new Date().toISOString(),
             settings: {
                 beaconUrl: this.beaconUrl,
                 notifications: {
-                    proposer: document.getElementById('notifyProposer').checked,
-                    attester: document.getElementById('notifyAttester').checked,
-                    sync: document.getElementById('notifySync').checked,
-                    minutesBefore: parseInt(document.getElementById('notifyMinutes').value)
+                    browser: {
+                        proposer: document.getElementById('notifyProposer').checked,
+                        attester: document.getElementById('notifyAttester').checked,
+                        sync: document.getElementById('notifySync').checked,
+                        missed: document.getElementById('notifyMissed').checked,
+                        minutesBefore: parseInt(document.getElementById('notifyMinutes').value),
+                        desktopSound: document.getElementById('desktopSound')?.checked !== false,
+                        desktopPersistent: document.getElementById('desktopPersistent')?.checked !== false
+                    },
+                    telegram: {
+                        proposer: document.getElementById('notifyProposerTelegram').checked,
+                        attester: document.getElementById('notifyAttesterTelegram').checked,
+                        sync: document.getElementById('notifySyncTelegram').checked,
+                        missed: document.getElementById('notifyMissedTelegram').checked,
+                        minutesBefore: parseInt(document.getElementById('notifyMinutesTelegram').value)
+                    }
                 },
                 telegram: {
                     enabled: localStorage.getItem('telegramEnabled') === 'true',
@@ -3597,7 +3746,9 @@ class ValidatorDutiesTracker {
                 browser: {
                     enabled: localStorage.getItem('browserNotifications') === 'true'
                 },
-                autoRefresh: localStorage.getItem('autoRefresh') === 'true'
+                autoRefresh: localStorage.getItem('autoRefresh') === 'true',
+                darkMode: localStorage.getItem('darkMode') || 'light',
+                validatorLabels: JSON.parse(localStorage.getItem('validatorLabels') || '{}')
             },
             validators: []
         };
