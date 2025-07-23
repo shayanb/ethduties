@@ -51,7 +51,7 @@ class ValidatorDutiesTracker {
         this.renderValidators();
         this.loadCachedDuties();
         this.initializeNotifications();
-        this.initializeDashboard();
+        this.initializeDashboard().catch(console.error);
         this.initializeDarkMode();
         this.startCountdownTimer();
     }
@@ -188,7 +188,7 @@ class ValidatorDutiesTracker {
         });
         
         // Dashboard mode toggle
-        document.getElementById('dashboardModeToggle').addEventListener('click', () => this.toggleDashboardMode());
+        document.getElementById('dashboardModeToggle').addEventListener('click', async () => await this.toggleDashboardMode());
         
         // Dark mode toggle (desktop)
         document.getElementById('darkModeToggle').addEventListener('click', () => this.toggleDarkMode());
@@ -2920,8 +2920,32 @@ class ValidatorDutiesTracker {
         panel.innerHTML = html;
     }
 
+    async initializeGenesisTime() {
+        if (this.genesisTime) return this.genesisTime;
+        
+        try {
+            const response = await fetch(`${this.serverUrl}/api/beacon/eth/v1/config/spec`, {
+                method: 'GET',
+                headers: { 'Accept': 'application/json' }
+            });
+            
+            if (response.ok) {
+                const data = await response.json();
+                this.genesisTime = parseInt(data.data.GENESIS_TIME);
+            } else {
+                // Fallback to mainnet genesis time if API fails
+                this.genesisTime = 1606824023;
+            }
+        } catch (error) {
+            console.warn('Failed to fetch genesis time from beacon API, using mainnet default:', error);
+            this.genesisTime = 1606824023;
+        }
+        
+        return this.genesisTime;
+    }
+
     getCurrentSlotSync() {
-        const genesisTime = 1606824023;
+        const genesisTime = this.genesisTime || 1606824023;
         const currentTime = Math.floor(Date.now() / 1000);
         return Math.floor((currentTime - genesisTime) / 12);
     }
@@ -3619,13 +3643,13 @@ class ValidatorDutiesTracker {
     }
 
     // Dashboard Mode Functionality
-    initializeDashboard() {
+    async initializeDashboard() {
         this.isDashboardMode = localStorage.getItem('dashboardMode') === 'true';
         this.dashboardUpdateInterval = null;
         this.blockStreamData = [];
         
         if (this.isDashboardMode) {
-            this.switchToDashboard();
+            await this.switchToDashboard();
         }
     }
 
@@ -3676,7 +3700,7 @@ class ValidatorDutiesTracker {
         }
     }
 
-    toggleDashboardMode() {
+    async toggleDashboardMode() {
         this.isDashboardMode = !this.isDashboardMode;
         localStorage.setItem('dashboardMode', this.isDashboardMode.toString());
         
@@ -3688,7 +3712,7 @@ class ValidatorDutiesTracker {
         const toggleBtn = document.getElementById('dashboardModeToggle');
         
         if (this.isDashboardMode) {
-            this.switchToDashboard();
+            await this.switchToDashboard();
             toggleBtn.textContent = '📋 Normal Mode';
             toggleBtn.classList.add('active');
         } else {
@@ -3698,7 +3722,7 @@ class ValidatorDutiesTracker {
         }
     }
 
-    switchToDashboard() {
+    async switchToDashboard() {
         // Hide normal pages and show dashboard
         document.querySelectorAll('.page').forEach(page => page.classList.remove('active'));
         document.getElementById('dashboardPage').classList.add('active');
@@ -3707,6 +3731,9 @@ class ValidatorDutiesTracker {
         const toggleBtn = document.getElementById('dashboardModeToggle');
         toggleBtn.textContent = '📋 Normal Mode';
         toggleBtn.classList.add('active');
+        
+        // Initialize genesis time for accurate calculations
+        await this.initializeGenesisTime();
         
         // Force enable auto-refresh in dashboard mode
         this.startAutoRefresh();
@@ -4053,8 +4080,12 @@ class ValidatorDutiesTracker {
 
         pastBlocks.forEach(duty => {
             const isTracked = this.validators.includes(duty.validator_index?.toString());
+            
+            // Only include tracked validators in past duties
+            if (!isTracked) return;
+            
             const validator = duty.validator_index?.toString();
-            const label = isTracked ? this.getValidatorLabel(validator) : `Validator ${duty.validator_index}`;
+            const label = this.getValidatorLabel(validator);
             
             // Find block details if available
             const blockDetail = allBlocks.find(block => block.slot === duty.slot);
@@ -4185,24 +4216,44 @@ class ValidatorDutiesTracker {
         if (slotElement) slotElement.textContent = currentSlot.toLocaleString();
         if (epochElement) epochElement.textContent = currentEpoch.toLocaleString();
         
-        // Calculate approximate block number (rough estimation)
-        const blockNumber = currentSlot + 15537394;
+        // Calculate approximate block number using The Merge block as reference
+        // The Merge happened at slot 4700013 and block 15537394
+        const mergeSlot = 4700013;
+        const mergeBlock = 15537394;
+        const blockNumber = currentSlot >= mergeSlot ? mergeBlock + (currentSlot - mergeSlot) : mergeBlock;
         if (blockElement) blockElement.textContent = blockNumber.toLocaleString();
         
         
-        // Fetch gas price (placeholder for now - beacon API doesn't provide gas price directly)
-        // We'll add a simple gas price display
-        this.fetchGasPrice();
+        // Fetch finalized epoch data from beacon API
+        this.fetchFinalizationData();
     }
     
     
-    async fetchGasPrice() {
-        // For now, just show a placeholder since beacon API doesn't provide gas price
-        // In production, you'd fetch from execution layer or external API
-        const gasElement = document.getElementById('currentGasPrice');
-        if (gasElement) {
-            gasElement.textContent = '~15 gwei'; // Placeholder
+    async fetchFinalizationData() {
+        const finalizedElement = document.getElementById('currentGasPrice');
+        if (!finalizedElement) return;
+        
+        try {
+            // Get finalized checkpoint data from beacon API
+            const response = await fetch(`${this.serverUrl}/api/beacon/eth/v1/beacon/states/head/finality_checkpoints`, {
+                method: 'GET',
+                headers: { 'Accept': 'application/json' }
+            });
+            
+            if (response.ok) {
+                const data = await response.json();
+                const finalizedEpoch = parseInt(data.data.finalized.epoch);
+                finalizedElement.textContent = `Epoch ${finalizedEpoch}`;
+                return;
+            }
+        } catch (error) {
+            console.warn('Failed to fetch finalization data:', error);
         }
+        
+        // Fallback - just show current epoch
+        const currentSlot = this.getCurrentSlotSync();
+        const currentEpoch = Math.floor(currentSlot / 32);
+        finalizedElement.textContent = `Epoch ${currentEpoch}`;
     }
 
     renderBlockStream() {
@@ -4212,10 +4263,11 @@ class ValidatorDutiesTracker {
         // Get network data from proposer duties
         const currentSlot = this.getCurrentSlotSync();
         const allProposers = this.networkOverview?.allProposers || [];
+        const allBlocks = this.networkOverview?.blocks || [];
         
-        // Get blocks around current slot (2 before, 1 current, 10 after for current block to be 3rd from top)
+        // Get blocks around current slot (5 before, 1 current, 5 after for centered current block)
         const relevantBlocks = allProposers
-            .filter(duty => duty.slot >= currentSlot - 2 && duty.slot <= currentSlot + 10)
+            .filter(duty => duty.slot >= currentSlot - 5 && duty.slot <= currentSlot + 5)
             .sort((a, b) => a.slot - b.slot);
 
         if (relevantBlocks.length === 0) {
@@ -4242,10 +4294,10 @@ class ValidatorDutiesTracker {
                     statusClass += ' shiver-confirming';
                 }
             } else if (isPast) {
-                statusClass = 'past';
+                statusClass = 'past confirmed';
                 statusDot = '<div class="block-status confirmed"></div>';
             } else {
-                statusClass = 'future';
+                statusClass = 'future unconfirmed';
                 statusDot = '<div class="block-status upcoming"></div>';
             }
             
@@ -4259,11 +4311,16 @@ class ValidatorDutiesTracker {
                 this.formatTimeAgo(Math.abs(timeUntil)) + ' ago' : 
                 (isCurrent ? 'Now' : this.formatTimeUntil(timeUntil));
 
+            // Find block details for graffiti (only for past/confirmed blocks)
+            const blockDetail = isPast ? allBlocks.find(block => block.slot === duty.slot) : null;
+            const hasGraffiti = blockDetail && blockDetail.graffiti && blockDetail.graffiti.trim() !== '';
+            const displayText = isPast && hasGraffiti ? blockDetail.graffiti : `Slot ${duty.slot}`;
+
             return `
                 <div class="block-item ${statusClass}" style="--block-color: ${isTracked ? this.getValidatorColor(duty.validator_index?.toString()) : 'transparent'}">
                     ${statusDot}
                     <div class="block-header">
-                        <div class="block-slot">Slot ${duty.slot}</div>
+                        <div class="block-slot">${displayText}</div>
                         <div class="block-time">${timeDisplay}</div>
                     </div>
                     <div class="block-proposer">
@@ -4314,7 +4371,10 @@ class ValidatorDutiesTracker {
     updateCurrentSlotEpoch() {
         const currentSlot = this.getCurrentSlotSync();
         const currentEpoch = Math.floor(currentSlot / 32);
-        const currentBlock = currentSlot + 15537394; // Approximate block number calculation
+        // Calculate block number relative to The Merge
+        const mergeSlot = 4700013;
+        const mergeBlock = 15537394;
+        const currentBlock = currentSlot >= mergeSlot ? mergeBlock + (currentSlot - mergeSlot) : mergeBlock;
         
         const slotElement = document.getElementById('currentSlotNumber');
         const epochElement = document.getElementById('currentEpochNumber');
