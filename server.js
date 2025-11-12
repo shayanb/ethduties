@@ -433,9 +433,27 @@ app.post('/api/notify', async (req, res) => {
     res.json({ success: true });
 });
 
+const { resolveEnsName } = require('./ens-resolver');
+
 // Get VAPID public key for push notifications
 app.get('/api/vapid-public-key', (req, res) => {
     res.json({ publicKey: process.env.VAPID_PUBLIC_KEY || '' });
+});
+
+app.get('/api/ens/resolve/:address', async (req, res) => {
+    try {
+        const { address } = req.params;
+        if (!address) {
+            return res.status(400).json({ error: 'Address is required' });
+        }
+
+        const ensName = await resolveEnsName(address);
+
+        res.json({ address, ensName });
+    } catch (error) {
+        console.error(`ENS resolution error for ${req.params.address}:`, error);
+        res.status(500).json({ error: 'Failed to resolve ENS name' });
+    }
 });
 
 // Health check endpoint
